@@ -139,8 +139,16 @@ echo ""
 # ── Generate Configs ──
 echo -e "${BOLD}📦  Generating configs...${NC}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# Use current working directory (where user ran the script)
+WORK_DIR="$(pwd)"
+
+# If install.sh is in a different location, warn the user
+SCRIPT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$SCRIPT_SRC" != "$WORK_DIR" ]; then
+    echo -e "${YELLOW}    ⚠ install.sh is at $SCRIPT_SRC but creating files in $WORK_DIR${NC}"
+fi
+
+cd "$WORK_DIR"
 
 # docker-compose.yml
 if [ "$METHOD" == "cloudflare" ]; then
@@ -289,7 +297,7 @@ fi
 
 # Nginx configs
 if [ "$METHOD" == "nginx" ] && [ -n "$domain" ]; then
-    NGINX_DIR="$SCRIPT_DIR/nginx"
+    NGINX_DIR="$WORK_DIR/nginx"
     mkdir -p "$NGINX_DIR"
 
     cat > "$NGINX_DIR/$domain.conf" << 'NGINX_EOF'
@@ -333,8 +341,8 @@ NGINX_EOF
 set -e
 if [ "$EUID" -ne 0 ]; then echo "Run as root or with sudo"; exit 1; fi
 apt-get update -qq && apt-get install -y -qq nginx
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for conf in "$SCRIPT_DIR"/*.conf; do
+WORK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for conf in "$WORK_DIR"/*.conf; do
     [ -e "$conf" ] || continue
     bn=$(basename "$conf")
     cp "$conf" "/etc/nginx/sites-available/$bn"
@@ -359,10 +367,10 @@ else
     COMPOSE_CMD="docker-compose"
 fi
 
-$COMPOSE_CMD down 2>/dev/null || true
-$COMPOSE_CMD pull 2>/dev/null || true
-$COMPOSE_CMD build --no-cache
-$COMPOSE_CMD up -d
+$COMPOSE_CMD --env-file "$WORK_DIR/.env" down 2>/dev/null || true
+$COMPOSE_CMD --env-file "$WORK_DIR/.env" pull 2>/dev/null || true
+$COMPOSE_CMD --env-file "$WORK_DIR/.env" build --no-cache
+$COMPOSE_CMD --env-file "$WORK_DIR/.env" up -d
 
 echo ""
 
@@ -397,10 +405,10 @@ elif [ "$METHOD" == "nginx" ] && [ -n "$domain" ]; then
 fi
 
 echo -e "  ${BOLD}Commands:${NC}"
-echo -e "    ${BOLD}logs${NC}     $COMPOSE_CMD logs -f"
-echo -e "    ${BOLD}stop${NC}     $COMPOSE_CMD down"
-echo -e "    ${BOLD}restart${NC}  $COMPOSE_CMD restart"
-echo -e "    ${BOLD}config${NC}   nano .env && $COMPOSE_CMD up -d"
+echo -e "    ${BOLD}logs${NC}     $COMPOSE_CMD --env-file "$WORK_DIR/.env" logs -f"
+echo -e "    ${BOLD}stop${NC}     $COMPOSE_CMD --env-file "$WORK_DIR/.env" down"
+echo -e "    ${BOLD}restart${NC}  $COMPOSE_CMD --env-file "$WORK_DIR/.env" restart"
+echo -e "    ${BOLD}config${NC}   nano .env && $COMPOSE_CMD --env-file "$WORK_DIR/.env" up -d"
 echo ""
 
 echo -e "  ${DIM}Built for privacy. No analytics. No tracking. Just links.${NC}"
