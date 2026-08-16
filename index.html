@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shorten — Private URL Shortener</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+    --bg: #fafafa; --surface: #ffffff; --text: #1a1a1a; --text-secondary: #6b7280;
+    --border: #e5e7eb; --primary: #2563eb; --primary-hover: #1d4ed8; --success: #10b981;
+    --warning: #f59e0b; --danger: #ef4444; --radius: 16px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+    --shadow-lg: 0 10px 40px rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0f0f0f; --surface: #1a1a1a; --text: #f3f4f6; --text-secondary: #9ca3af;
+        --border: #2d2d2d; --primary: #3b82f6; --primary-hover: #2563eb;
+    }
+}
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh;
+}
+.container { max-width: 800px; margin: 0 auto; padding: 60px 20px; }
+header { text-align: center; margin-bottom: 48px; }
+.logo {
+    font-size: 42px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+}
+.logo-icon {
+    width: 48px; height: 48px; background: var(--primary); border-radius: 14px;
+    display: flex; align-items: center; justify-content: center; font-size: 24px;
+}
+.subtitle { color: var(--text-secondary); font-size: 18px; }
+.privacy-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(16,185,129,0.1); color: var(--success);
+    border: 1px solid rgba(16,185,129,0.2); border-radius: 20px;
+    padding: 6px 16px; font-size: 13px; font-weight: 600; margin-top: 12px;
+}
+.card {
+    background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border);
+    box-shadow: var(--shadow); padding: 32px; margin-bottom: 24px;
+}
+.input-group { display: flex; gap: 12px; }
+input[type="url"], input[type="text"], input[type="password"], select {
+    flex: 1; padding: 16px 20px; border: 2px solid var(--border); border-radius: 12px;
+    font-size: 16px; background: var(--bg); color: var(--text); outline: none; transition: all 0.2s;
+}
+input:focus, select:focus {
+    border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+input::placeholder, select::placeholder { color: var(--text-secondary); }
+button {
+    padding: 16px 32px; background: var(--primary); color: white; border: none;
+    border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; white-space: nowrap;
+}
+button:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+button:active { transform: translateY(0); }
+button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.advanced-toggle {
+    margin-top: 16px; font-size: 14px; color: var(--primary); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; font-weight: 500;
+}
+.advanced-panel {
+    display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);
+    animation: slideDown 0.2s ease;
+}
+.advanced-panel.open { display: block; }
+.advanced-row { display: flex; gap: 12px; margin-bottom: 12px; }
+.advanced-row:last-child { margin-bottom: 0; }
+.advanced-row .field { flex: 1; }
+.advanced-row label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+}
+@keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.result {
+    margin-top: 24px; padding: 20px;
+    background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.15);
+    border-radius: 12px; display: none; align-items: center; justify-content: space-between; gap: 16px;
+}
+.result.show { display: flex; }
+.result-url {
+    font-family: 'SF Mono', monospace; font-size: 18px; font-weight: 700;
+    color: var(--primary); word-break: break-all;
+}
+.result-meta { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.result-tags { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.tag {
+    font-size: 11px; padding: 3px 10px; border-radius: 6px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.3px;
+}
+.tag.pw { background: rgba(239,68,68,0.1); color: var(--danger); }
+.tag.exp { background: rgba(245,158,11,0.1); color: var(--warning); }
+.tag.dom { background: rgba(59,130,246,0.1); color: var(--primary); }
+.copy-btn { padding: 10px 20px; font-size: 14px; }
+.copy-btn.copied { background: var(--success); }
+.error {
+    margin-top: 16px; padding: 12px 16px;
+    background: rgba(239,68,68,0.05); border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 10px; color: #ef4444; font-size: 14px; display: none;
+}
+.error.show { display: block; }
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
+.stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; text-align: center; box-shadow: var(--shadow);
+}
+.stat-value { font-size: 28px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+.stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.recent {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+}
+.recent-header {
+    padding: 20px 24px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 16px;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.recent-list { max-height: 400px; overflow-y: auto; }
+.recent-item {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    transition: background 0.15s;
+}
+.recent-item:hover { background: var(--bg); }
+.recent-item:last-child { border-bottom: none; }
+.recent-url { flex: 1; min-width: 0; }
+.recent-short {
+    font-family: 'SF Mono', monospace; font-weight: 600; color: var(--primary);
+    font-size: 14px; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.domain-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 6px; background: var(--warning);
+    color: white; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.domain-badge.global { background: var(--text-secondary); }
+.recent-long {
+    font-size: 13px; color: var(--text-secondary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.recent-tags { display: flex; gap: 4px; margin-top: 4px; }
+.empty-state { padding: 48px; text-align: center; color: var(--text-secondary); }
+.spinner {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+    border-radius: 50%; animation: spin 0.6s linear infinite;
+    margin-right: 8px; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) {
+    .container { padding: 32px 16px; }
+    .logo { font-size: 32px; }
+    .input-group { flex-direction: column; }
+    .result { flex-direction: column; align-items: stretch; }
+    .recent-item { flex-direction: column; align-items: flex-start; }
+    .advanced-row { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div class="logo"><div class="logo-icon">🔗</div>Shorten</div>
+        <p class="subtitle">Private, self-hosted URL shortener</p>
+        <div class="privacy-badge">
+            <span>🛡️</span> Zero tracking · Zero logs · Zero analytics
+        </div>
+    </header>
+
+    <div class="stats" id="stats">
+        <div class="stat"><div class="stat-value" id="stat-links">0</div><div class="stat-label">Active Links</div></div>
+        <div class="stat"><div class="stat-value" id="stat-max">10K</div><div class="stat-label">Link Limit</div></div>
+    </div>
+
+    <div class="card">
+        <div class="input-group">
+            <input type="url" id="urlInput" placeholder="Paste your long URL here..." autocomplete="off">
+            <button id="shortenBtn" onclick="shorten()">Shorten</button>
+        </div>
+
+        <div class="advanced-toggle" onclick="toggleAdvanced()">
+            <span id="advIcon">▸</span> Advanced options
+        </div>
+        <div class="advanced-panel" id="advancedPanel">
+            <div class="advanced-row">
+                <div class="field">
+                    <label>Custom Domain</label>
+                    <input type="text" id="domainInput" placeholder="e.g. go.mybrand.com">
+                </div>
+                <div class="field">
+                    <label>Custom Code</label>
+                    <input type="text" id="codeInput" placeholder="e.g. launch2026">
+                </div>
+            </div>
+            <div class="advanced-row">
+                <div class="field">
+                    <label>Password Protection</label>
+                    <input type="password" id="pwdInput" placeholder="Leave empty for no password">
+                </div>
+                <div class="field">
+                    <label>Auto-Expire</label>
+                    <select id="expireInput">
+                        <option value="">Never</option>
+                        <option value="1">1 hour</option>
+                        <option value="6">6 hours</option>
+                        <option value="24">1 day</option>
+                        <option value="168">1 week</option>
+                        <option value="720">1 month</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="result" id="result">
+            <div>
+                <div class="result-url" id="resultUrl"></div>
+                <div class="result-meta" id="resultMeta"></div>
+                <div class="result-tags" id="resultTags"></div>
+            </div>
+            <button class="copy-btn" id="copyBtn" onclick="copyUrl()">Copy</button>
+        </div>
+    </div>
+
+    <div class="recent">
+        <div class="recent-header">
+            <span>Your Links</span>
+            <span style="font-size:13px;color:var(--text-secondary);font-weight:400;" id="recentCount"></span>
+        </div>
+        <div class="recent-list" id="recentList">
+            <div class="empty-state">No links yet. Create your first one above!</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const urlInput = document.getElementById('urlInput');
+const shortenBtn = document.getElementById('shortenBtn');
+const result = document.getElementById('result');
+const resultUrl = document.getElementById('resultUrl');
+const resultMeta = document.getElementById('resultMeta');
+const resultTags = document.getElementById('resultTags');
+const error = document.getElementById('error');
+const copyBtn = document.getElementById('copyBtn');
+const domainInput = document.getElementById('domainInput');
+const codeInput = document.getElementById('codeInput');
+const pwdInput = document.getElementById('pwdInput');
+const expireInput = document.getElementById('expireInput');
+const advancedPanel = document.getElementById('advancedPanel');
+const advIcon = document.getElementById('advIcon');
+
+urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
+
+domainInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
+codeInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
+pwdInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
+
+function toggleAdvanced() {
+    advancedPanel.classList.toggle('open');
+    advIcon.textContent = advancedPanel.classList.contains('open') ? '▾' : '▸';
+}
+
+async function shorten() {
+    const url = urlInput.value.trim();
+    if (!url) return;
+
+    error.classList.remove('show');
+    shortenBtn.disabled = true;
+    shortenBtn.innerHTML = '<span class="spinner"></span>Shortening...';
+
+    const payload = { url };
+    const domain = domainInput.value.trim();
+    const customCode = codeInput.value.trim();
+    const password = pwdInput.value;
+    const expires = expireInput.value;
+    if (domain) payload.domain = domain;
+    if (customCode) payload.custom_code = customCode;
+    if (password) payload.password = password;
+    if (expires) payload.expires = expires;
+
+    try {
+        const res = await fetch('/api/shorten', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Something went wrong');
+
+        resultUrl.textContent = data.short_url;
+        const meta = data.domain ? `Domain: ${data.domain} · Code: ${data.code}` : `Code: ${data.code}`;
+        resultMeta.textContent = meta;
+
+        const tags = [];
+        if (password) tags.push('<span class="tag pw">🔒 Password</span>');
+        if (expires) {
+            const h = parseInt(expires);
+            const label = h < 24 ? `${h}h` : h < 168 ? `${Math.floor(h/24)}d` : `${Math.floor(h/168)}w`;
+            tags.push(`<span class="tag exp">⏱️ ${label}</span>`);
+        }
+        if (domain) tags.push(`<span class="tag dom">🌐 ${escapeHtml(domain)}</span>`);
+        resultTags.innerHTML = tags.join('');
+
+        result.classList.add('show');
+        copyBtn.textContent = 'Copy';
+        copyBtn.classList.remove('copied');
+        urlInput.value = '';
+        domainInput.value = '';
+        codeInput.value = '';
+        pwdInput.value = '';
+        expireInput.value = '';
+
+        loadRecent();
+        loadStats();
+    } catch (err) {
+        error.textContent = err.message;
+        error.classList.add('show');
+    } finally {
+        shortenBtn.disabled = false;
+        shortenBtn.textContent = 'Shorten';
+    }
+}
+
+async function copyUrl() {
+    const url = resultUrl.textContent;
+    try {
+        await navigator.clipboard.writeText(url);
+        copyBtn.textContent = 'Copied!';
+        copyBtn.classList.add('copied');
+        setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.classList.remove('copied'); }, 2000);
+    } catch {
+        const ta = document.createElement('textarea');
+        ta.value = url; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => copyBtn.textContent = 'Copy', 2000);
+    }
+}
+
+async function loadStats() {
+    try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        document.getElementById('stat-links').textContent = data.total_links.toLocaleString();
+        document.getElementById('stat-max').textContent = data.max_links >= 1000 ? `${(data.max_links/1000).toFixed(0)}K` : data.max_links;
+    } catch {}
+}
+
+async function loadRecent() {
+    try {
+        const res = await fetch('/api/urls');
+        const urls = await res.json();
+        const list = document.getElementById('recentList');
+        document.getElementById('recentCount').textContent = `${urls.length} total`;
+        if (urls.length === 0) {
+            list.innerHTML = '<div class="empty-state">No links yet. Create your first one above!</div>';
+            return;
+        }
+        const baseHost = window.location.host;
+        list.innerHTML = urls.map(u => {
+            const isCustom = u.domain && u.domain !== baseHost;
+            const badge = isCustom ? `<span class="domain-badge">${escapeHtml(u.domain)}</span>` : `<span class="domain-badge global">default</span>`;
+            const tags = [];
+            if (u.has_password) tags.push('<span class="tag pw">🔒</span>');
+            if (u.expires) {
+                const exp = new Date(u.expires);
+                const now = new Date();
+                const diff = Math.ceil((exp - now) / (1000 * 60 * 60));
+                const label = diff < 24 ? `${diff}h` : `${Math.floor(diff/24)}d`;
+                tags.push(`<span class="tag exp">⏱️ ${label}</span>`);
+            }
+            return `
+            <div class="recent-item">
+                <div class="recent-url">
+                    <div class="recent-short">${escapeHtml(u.short_url)} ${badge}</div>
+                    <div class="recent-long">${escapeHtml(u.url)}</div>
+                    <div class="recent-tags">${tags.join('')}</div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch {}
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+loadStats();
+loadRecent();
+setInterval(loadStats, 10000);
+</script>
+</body>
+</html>
