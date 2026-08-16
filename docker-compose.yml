@@ -1,6 +1,3 @@
-# Cloak.URL Docker Compose
-# Host port ${PORT} (default 3000) maps to container port 3000
-
 services:
   cloak:
     build: .
@@ -17,15 +14,14 @@ services:
     networks:
       - cloak-net
 
-  # Uncomment for Cloudflare Tunnel:
-  # tunnel:
-  #   image: cloudflare/cloudflared:latest
-  #   restart: unless-stopped
-  #   command: tunnel run
-  #   environment:
-  #     - TUNNEL_TOKEN=${TUNNEL_TOKEN}
-  #   networks:
-  #     - cloak-net
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    networks:
+      - cloak-net
 
 networks:
   cloak-net:

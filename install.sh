@@ -148,12 +148,6 @@ if [ "$SCRIPT_SRC" != "$WORK_DIR" ]; then
     echo -e "${YELLOW}    ⚠ install.sh is at $SCRIPT_SRC but creating files in $WORK_DIR${NC}"
 fi
 
-# Check for conflicting .env files that docker compose might pick up
-if [ -f "$HOME/.env" ] && [ "$HOME" != "$WORK_DIR" ]; then
-    echo -e "${YELLOW}    ⚠ Found $HOME/.env — this may cause permission errors${NC}"
-    echo -e "    ${DIM}Run from the project directory, or remove $HOME/.env${NC}"
-fi
-
 cd "$WORK_DIR"
 
 # docker-compose.yml
@@ -284,21 +278,10 @@ EOF
     fi
 fi
 
-# .env - use DB_HOST_PATH for clarity (host-side path reference)
-cat > .env << EOF
-# Cloak.URL — edit and restart with: docker compose up -d
-METHOD=${METHOD}
-BASE_URL=${BASE_URL}
-PORT=${PORT}
-DB_HOST_PATH=${DB_HOST_PATH}
-# Note: Container internal port is always 3000
-# Host port ${PORT} maps to container port 3000
-EOF
-
+# Export variables for docker compose substitution
+export METHOD PORT BASE_URL DB_HOST_PATH DB_VOLUME
 if [ "$METHOD" == "cloudflare" ]; then
-    cat >> .env << EOF
-TUNNEL_TOKEN=${tunnel_token}
-EOF
+    export TUNNEL_TOKEN
 fi
 
 # Nginx configs
@@ -373,7 +356,16 @@ else
     COMPOSE_CMD="docker-compose"
 fi
 
-# Ensure we run from the project directory so docker compose finds .env
+# Export all variables so docker-compose can substitute them
+export METHOD PORT BASE_URL DB_HOST_PATH
+if [ "$USE_DOCKER_VOLUME" = true ]; then
+    export DB_VOLUME
+fi
+if [ "$METHOD" == "cloudflare" ]; then
+    export TUNNEL_TOKEN
+fi
+
+# Ensure we run from the project directory
 cd "$WORK_DIR"
 
 $COMPOSE_CMD down 2>/dev/null || true
@@ -417,7 +409,7 @@ echo -e "  ${BOLD}Commands:${NC}"
 echo -e "    ${BOLD}logs${NC}     cd "$WORK_DIR" && $COMPOSE_CMD logs -f"
 echo -e "    ${BOLD}stop${NC}     cd "$WORK_DIR" && $COMPOSE_CMD down"
 echo -e "    ${BOLD}restart${NC}  cd "$WORK_DIR" && $COMPOSE_CMD restart"
-echo -e "    ${BOLD}config${NC}   nano .env && cd "$WORK_DIR" && $COMPOSE_CMD up -d"
+echo -e "    ${BOLD}config${NC}   edit docker-compose.yml && cd "$WORK_DIR" && $COMPOSE_CMD up -d"
 echo ""
 
 echo -e "  ${DIM}Built for privacy. No analytics. No tracking. Just links.${NC}"
