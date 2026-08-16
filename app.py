@@ -62,7 +62,6 @@ def is_valid_domain(domain: str) -> bool:
 def is_valid_path_prefix(path: str) -> bool:
     if not path:
         return True
-    # Path prefix like "blog", "go", "links" — no leading/trailing slash
     pattern = r"^[a-zA-Z0-9][-a-zA-Z0-9_]*$"
     return bool(re.match(pattern, path))
 
@@ -85,6 +84,11 @@ def cleanup_expired():
     conn.commit()
     conn.close()
     return deleted
+
+def get_base_url_protocol():
+    """Extract protocol from BASE_URL for consistency."""
+    parsed = urlparse(BASE_URL)
+    return parsed.scheme or "https"
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -132,6 +136,20 @@ class Handler(BaseHTTPRequestHandler):
     def _get_base_domain(self):
         return get_domain_from_host(BASE_URL)
 
+    def _build_short_url(self, code, domain=None, path_prefix=None):
+        """Build a short URL consistently using the same protocol as BASE_URL."""
+        protocol = get_base_url_protocol()
+        if domain:
+            if path_prefix:
+                return f"{protocol}://{domain}/{path_prefix}/{code}"
+            return f"{protocol}://{domain}/{code}"
+        else:
+            parsed = urlparse(BASE_URL)
+            base = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme else BASE_URL.rstrip("/")
+            if path_prefix:
+                return f"{base}/{path_prefix}/{code}"
+            return f"{base}/{code}"
+
     def do_GET(self):
         path = self.path
         host_domain = self._get_domain()
@@ -156,12 +174,7 @@ class Handler(BaseHTTPRequestHandler):
             for r in rows:
                 d = r[5] or base_domain
                 prefix = r[2]
-                if prefix:
-                    short = f"https://{d}/{prefix}/{r[0]}"
-                elif d != base_domain:
-                    short = f"https://{d}/{r[0]}"
-                else:
-                    short = f"{BASE_URL}/{r[0]}"
+                short = self._build_short_url(r[0], d, prefix)
                 urls.append({
                     "code": r[0], "url": r[1], "path_prefix": r[2],
                     "expires": r[3], "created": r[4], "domain": d,
@@ -176,11 +189,9 @@ class Handler(BaseHTTPRequestHandler):
         path_parts = [p for p in path.strip("/").split("/") if p]
 
         if len(path_parts) == 1:
-            # Simple short URL: /CODE
             code = path_parts[0]
             prefix = None
         elif len(path_parts) == 2:
-            # Prefixed short URL: /PREFIX/CODE
             prefix = path_parts[0]
             code = path_parts[1]
         else:
@@ -193,48 +204,64 @@ class Handler(BaseHTTPRequestHandler):
 
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        row = None
 
-        # Try exact match with prefix first
+        # Priority order for lookup:
+        # 1. Exact match: code + prefix + domain (if custom domain accessed)
+        # 2. Exact match: code + prefix + NULL domain
+        # 3. Fallback: code + NULL prefix + domain (if custom domain accessed)
+        # 4. Fallback: code + NULL prefix + NULL domain
+
         if prefix:
-            c.execute("""SELECT url, password_hash, expires_at FROM urls 
-                WHERE code = ? AND path_prefix = ? AND (domain IS NULL OR domain = ?)""",
-                (code, prefix, host_domain))
-            row = c.fetchone()
+            if host_domain and host_domain != base_domain:
+                c.execute("""SELECT url, password_hash, expires_at, domain FROM urls 
+                    WHERE code = ? AND path_prefix = ? AND domain = ?""",
+                    (code, prefix, host_domain))
+                row = c.fetchone()
+
+            if not row:
+                c.execute("""SELECT url, password_hash, expires_at, domain FROM urls 
+                    WHERE code = ? AND path_prefix = ? AND domain IS NULL""",
+                    (code, prefix))
+                row = c.fetchone()
         else:
-            row = None
+            if host_domain and host_domain != base_domain:
+                c.execute("""SELECT url, password_hash, expires_at, domain FROM urls 
+                    WHERE code = ? AND path_prefix IS NULL AND domain = ?""",
+                    (code, host_domain))
+                row = c.fetchone()
 
-        # Fallback: try without prefix
-        if not row:
-            c.execute("""SELECT url, password_hash, expires_at FROM urls 
-                WHERE code = ? AND path_prefix IS NULL AND (domain IS NULL OR domain = ?)""",
-                (code, host_domain))
-            row = c.fetchone()
-
-        # Last fallback: try domain-specific with prefix
-        if not row and prefix and host_domain and host_domain != base_domain:
-            c.execute("""SELECT url, password_hash, expires_at FROM urls 
-                WHERE code = ? AND path_prefix = ? AND domain = ?""",
-                (code, prefix, host_domain))
-            row = c.fetchone()
+            if not row:
+                c.execute("""SELECT url, password_hash, expires_at, domain FROM urls 
+                    WHERE code = ? AND path_prefix IS NULL AND domain IS NULL""",
+                    (code,))
+                row = c.fetchone()
 
         if row:
-            url, pwd_hash, expires = row
-            if expires and datetime.fromisoformat(expires) < datetime.now():
-                c.execute("DELETE FROM urls WHERE code = ?", (code,))
-                conn.commit()
-                conn.close()
-                return self._send_json({"error": "Link expired"}, 410)
+            url, pwd_hash, expires, link_domain = row
+            if expires:
+                try:
+                    exp_dt = datetime.fromisoformat(expires)
+                    if exp_dt < datetime.now():
+                        c.execute("DELETE FROM urls WHERE code = ? AND path_prefix IS ? AND domain IS ?", 
+                                  (code, prefix, link_domain))
+                        conn.commit()
+                        conn.close()
+                        return self._send_json({"error": "Link expired"}, 410)
+                except (ValueError, TypeError):
+                    pass
 
             conn.close()
             if pwd_hash:
-                return self._send_password_page(code, prefix)
+                return self._send_password_page(code, prefix, link_domain)
             return self._send_redirect(url)
 
         conn.close()
         self._send_json({"error": "Not found"}, 404)
 
-    def _send_password_page(self, code, prefix=None):
+    def _send_password_page(self, code, prefix=None, domain=None):
         prefix_path = f"{prefix}/" if prefix else ""
+        domain_json = json.dumps(domain or "")
         html = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width">
 <style>
@@ -265,7 +292,7 @@ function unlock(e) {
 e.preventDefault();
 const pwd = document.getElementById('pwd').value;
 const err = document.getElementById('err');
-fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:'""" + code + """',prefix:'""" + (prefix or "") + """',password:pwd})})
+fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:'""" + code + """',prefix:'""" + (prefix or "") + """',domain:""" + domain_json + """,password:pwd})})
 .then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;else{err.textContent=d.error||'Wrong password';err.style.display='block';}})
 .catch(()=>{err.textContent='Error unlocking';err.style.display='block';});
 }
@@ -310,32 +337,37 @@ fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},b
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
 
-            # Check duplicate
-            c.execute("""SELECT code FROM urls WHERE url = ? AND domain IS ? AND path_prefix IS ?""",
-                       (url, custom_domain or None, path_prefix or None))
+            # Check duplicate - use proper NULL-safe comparison
+            c.execute("""SELECT code, domain, path_prefix FROM urls WHERE url = ? 
+                AND ((domain = ?) OR (domain IS NULL AND ? = ''))
+                AND ((path_prefix = ?) OR (path_prefix IS NULL AND ? = ''))""",
+                (url, custom_domain or None, custom_domain, path_prefix or None, path_prefix))
             existing = c.fetchone()
             if existing:
                 code = existing[0]
-                if path_prefix:
-                    short = f"https://{custom_domain}/{path_prefix}/{code}" if custom_domain else f"{BASE_URL}/{path_prefix}/{code}"
-                else:
-                    short = f"https://{custom_domain}/{code}" if custom_domain else f"{BASE_URL}/{code}"
+                existing_domain = existing[1]
+                existing_prefix = existing[2]
+                short = self._build_short_url(code, existing_domain, existing_prefix)
                 conn.close()
-                return self._send_json({"short_url": short, "code": code, "domain": custom_domain or None, "path_prefix": path_prefix or None})
+                return self._send_json({"short_url": short, "code": code, "domain": existing_domain, "path_prefix": existing_prefix})
 
             # Generate or use custom code
             if custom_code:
                 code = custom_code
-                c.execute("""SELECT 1 FROM urls WHERE code = ? AND domain IS ? AND path_prefix IS ?""",
-                           (code, custom_domain or None, path_prefix or None))
+                c.execute("""SELECT 1 FROM urls WHERE code = ? 
+                    AND ((domain = ?) OR (domain IS NULL AND ? = ''))
+                    AND ((path_prefix = ?) OR (path_prefix IS NULL AND ? = ''))""",
+                    (code, custom_domain or None, custom_domain, path_prefix or None, path_prefix))
                 if c.fetchone():
                     conn.close()
                     return self._send_json({"error": "This code is already taken"}, 409)
             else:
                 code = generate_code()
                 while True:
-                    c.execute("""SELECT 1 FROM urls WHERE code = ? AND domain IS ? AND path_prefix IS ?""",
-                               (code, custom_domain or None, path_prefix or None))
+                    c.execute("""SELECT 1 FROM urls WHERE code = ? 
+                        AND ((domain = ?) OR (domain IS NULL AND ? = ''))
+                        AND ((path_prefix = ?) OR (path_prefix IS NULL AND ? = ''))""",
+                        (code, custom_domain or None, custom_domain, path_prefix or None, path_prefix))
                     if not c.fetchone():
                         break
                     code = generate_code()
@@ -356,10 +388,7 @@ fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},b
             conn.commit()
             conn.close()
 
-            if path_prefix:
-                short = f"https://{custom_domain}/{path_prefix}/{code}" if custom_domain else f"{BASE_URL}/{path_prefix}/{code}"
-            else:
-                short = f"https://{custom_domain}/{code}" if custom_domain else f"{BASE_URL}/{code}"
+            short = self._build_short_url(code, custom_domain or None, path_prefix or None)
 
             return self._send_json({
                 "short_url": short,
@@ -375,23 +404,47 @@ fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},b
                 data = json.loads(body)
                 code = data.get("code", "").strip()
                 prefix = data.get("prefix", "").strip() or None
+                domain = data.get("domain", "").strip() or None
                 password = data.get("password", "").strip()
             except:
                 return self._send_json({"error": "Invalid JSON"}, 400)
 
+            if not code:
+                return self._send_json({"error": "Code is required"}, 400)
+
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
+
+            # Look up with domain awareness
             c.execute("""SELECT url, password_hash, expires_at FROM urls 
-                WHERE code = ? AND path_prefix IS ?""", (code, prefix))
+                WHERE code = ? 
+                AND ((path_prefix = ?) OR (path_prefix IS NULL AND ? IS NULL))
+                AND ((domain = ?) OR (domain IS NULL AND ? IS NULL))""",
+                (code, prefix, prefix, domain, domain))
             row = c.fetchone()
+
+            # Fallback: if no domain specified, try to find any matching link
+            if not row and not domain:
+                c.execute("""SELECT url, password_hash, expires_at FROM urls 
+                    WHERE code = ? 
+                    AND ((path_prefix = ?) OR (path_prefix IS NULL AND ? IS NULL))
+                    AND domain IS NULL""",
+                    (code, prefix, prefix))
+                row = c.fetchone()
+
             conn.close()
 
             if not row:
                 return self._send_json({"error": "Not found"}, 404)
 
             url, pwd_hash, expires = row
-            if expires and datetime.fromisoformat(expires) < datetime.now():
-                return self._send_json({"error": "Expired"}, 410)
+            if expires:
+                try:
+                    exp_dt = datetime.fromisoformat(expires)
+                    if exp_dt < datetime.now():
+                        return self._send_json({"error": "Expired"}, 410)
+                except (ValueError, TypeError):
+                    pass
 
             if pwd_hash and hash_password(password) != pwd_hash:
                 return self._send_json({"error": "Wrong password"}, 403)

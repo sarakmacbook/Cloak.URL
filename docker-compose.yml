@@ -4,14 +4,14 @@ services:
   cloak:
     build: .
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${PORT:-3000}:3000"
     environment:
       - PORT=3000
       - BASE_URL=${BASE_URL:-http://localhost:3000}
       - DB_PATH=/app/data/urls.db
       - MAX_LINKS=10000
     volumes:
-      - ./data:/app/data
+      - ${DB_HOST_PATH:-./data}:/app/data
     restart: unless-stopped
     networks:
       - cloak-net

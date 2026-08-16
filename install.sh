@@ -1,7 +1,5 @@
 #!/bin/bash
 # Cloak.URL One-Click Installer
-# Supports both Cloudflare Tunnel and Nginx
-# URL format: domain.com/custom (path prefix)
 
 set -e
 
@@ -11,6 +9,7 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
+DIM='\033[2m'
 NC='\033[0m'
 
 echo ""
@@ -18,127 +17,111 @@ echo -e "${BOLD}🔗  Cloak.URL Installer${NC}"
 echo -e "${BLUE}    Private URL shortener — zero tracking, zero logs${NC}"
 echo ""
 
-# ───────────────────────────────────────────────
-# 1. Auto-detect if running as root
-# ───────────────────────────────────────────────
 SUDO=""
 if [ "$EUID" -ne 0 ]; then
     SUDO="sudo"
 fi
 
-# ───────────────────────────────────────────────
-# 2. Choose deployment method (default: Cloudflare Tunnel)
-# ───────────────────────────────────────────────
+# ── Deployment Method ──
 echo -e "${BOLD}🚀  Deployment Method${NC}"
-echo -e "    ${CYAN}1) Cloudflare Tunnel${NC} — No open ports, works behind any router [Default]"
+echo -e "    ${CYAN}1) Cloudflare Tunnel${NC} — No open ports [Default]"
 echo -e "    ${CYAN}2) Nginx${NC}            — Traditional reverse proxy"
 echo ""
-read -p "    Press Enter for Cloudflare Tunnel, or type 2 for Nginx: " deploy_method
+read -p "    Press Enter for Tunnel, or type 2 for Nginx: " deploy_method
 
 METHOD="cloudflare"
 if [ "$deploy_method" == "2" ]; then
     METHOD="nginx"
-    echo -e "${GREEN}✅  Nginx selected${NC}"
+    echo -e "${GREEN}    ✓ Nginx${NC}"
 else
-    echo -e "${GREEN}✅  Cloudflare Tunnel selected${NC}"
+    echo -e "${GREEN}    ✓ Cloudflare Tunnel${NC}"
 fi
 echo ""
 
-# ───────────────────────────────────────────────
-# 3. Port (default: 3000)
-# ───────────────────────────────────────────────
+# ── Port ──
 echo -e "${BOLD}📡  Port${NC}"
 read -p "    Press Enter for 3000, or type a port: " user_port
 PORT="${user_port:-3000}"
-
 if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
     PORT=3000
 fi
-
-echo -e "${GREEN}✅  Port: $PORT${NC}"
+echo -e "${GREEN}    ✓ $PORT${NC}"
 echo ""
 
-# ───────────────────────────────────────────────
-# 4. Database Location (NEW)
-# ───────────────────────────────────────────────
+# ── Database Location ──
 echo -e "${BOLD}💾  Database Location${NC}"
-echo "    Where should the SQLite database be stored?"
-echo -e "    ${CYAN}1) Inside project folder${NC} — ./data/urls.db [Default, easy backup]"
-echo -e "    ${CYAN}2) Docker volume${NC}       — Named volume, survives container deletion"
-echo -e "    ${CYAN}3) Custom path${NC}         — e.g. /var/lib/cloak-url/data"
+echo "    1) ./data              [Default — easy backup]"
+echo "    2) Docker volume       [Survives container deletion]"
+echo "    3) Custom path         [e.g. /var/lib/...]"
 echo ""
-read -p "    Press Enter for project folder, or type 2/3: " db_choice
+read -p "    Press Enter for ./data, or type 2/3: " db_choice
 
-DB_PATH="./data"
+DB_HOST_PATH="./data"
 DB_VOLUME=""
+USE_DOCKER_VOLUME=false
 
 if [ "$db_choice" == "2" ]; then
-    DB_PATH="/app/data"
+    DB_HOST_PATH="cloak-url-data"
     DB_VOLUME="cloak-url-data"
-    echo -e "${GREEN}✅  Docker volume: cloak-url-data${NC}"
+    USE_DOCKER_VOLUME=true
+    echo -e "${GREEN}    ✓ Docker volume${NC}"
 elif [ "$db_choice" == "3" ]; then
-    read -p "    Enter full path (e.g. /var/lib/cloak-url/data): " custom_db_path
-    if [ -z "$custom_db_path" ]; then
-        DB_PATH="./data"
-        echo -e "${YELLOW}    Empty path, using default: ./data${NC}"
+    read -p "    Enter directory path (not file path): " custom_db_path
+    if [ -n "$custom_db_path" ]; then
+        # Ensure it's a directory path, not a file path
+        DB_HOST_PATH="$custom_db_path"
+        $SUDO mkdir -p "$DB_HOST_PATH" 2>/dev/null || true
+        echo -e "${GREEN}    ✓ $DB_HOST_PATH${NC}"
     else
-        DB_PATH="$custom_db_path"
-        $SUDO mkdir -p "$DB_PATH"
-        echo -e "${GREEN}✅  Custom path: $DB_PATH${NC}"
+        mkdir -p ./data
+        echo -e "${GREEN}    ✓ ./data${NC}"
     fi
 else
     mkdir -p ./data
-    echo -e "${GREEN}✅  Project folder: ./data${NC}"
+    echo -e "${GREEN}    ✓ ./data${NC}"
 fi
 echo ""
 
-# ───────────────────────────────────────────────
-# 5. Cloudflare Tunnel Token (if method 1)
-# ───────────────────────────────────────────────
+# ── Cloudflare Token ──
 TUNNEL_TOKEN=""
-
 if [ "$METHOD" == "cloudflare" ]; then
-    echo -e "${BOLD}🌐  Cloudflare Tunnel Token${NC}"
-    echo -e "    Get one at: ${CYAN}https://one.dash.cloudflare.com → Networks → Tunnels → Create${NC}"
+    echo -e "${BOLD}🌐  Cloudflare Token${NC}"
+    echo -e "    ${DIM}Get one at: one.dash.cloudflare.com → Networks → Tunnels → Create${NC}"
     echo ""
-    read -p "    Paste token (or press Enter to skip): " tunnel_token
+    read -p "    Paste token (or Enter to skip): " tunnel_token
     if [ -z "$tunnel_token" ]; then
         tunnel_token="YOUR_TUNNEL_TOKEN_HERE"
-        echo -e "${YELLOW}    ⚠️  Skipped. Edit .env later and add TUNNEL_TOKEN.${NC}"
+        echo -e "${YELLOW}    ⚠ Skipped — edit .env later${NC}"
+    else
+        echo -e "${GREEN}    ✓ Token saved${NC}"
     fi
-    echo -e "${GREEN}✅  Token saved${NC}"
     echo ""
 fi
 
-# ───────────────────────────────────────────────
-# 6. Domain (default: localhost)
-# ───────────────────────────────────────────────
+# ── Domain ──
 echo -e "${BOLD}🌐  Domain${NC}"
-echo "    URL format: yourdomain.com/CODE"
-read -p "    Enter domain (press Enter for localhost): " domain
+read -p "    Enter domain (or Enter for localhost): " domain
 
 BASE_URL="http://localhost:$PORT"
 if [ -n "$domain" ]; then
     if [[ "$domain" =~ ^[a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)+$ ]]; then
         BASE_URL="https://$domain"
-        echo -e "${GREEN}✅  Domain: $domain${NC}"
+        echo -e "${GREEN}    ✓ $domain${NC}"
     else
-        echo -e "${RED}    ❌ Invalid domain. Using localhost.${NC}"
+        echo -e "${RED}    ✗ Invalid — using localhost${NC}"
     fi
 else
-    echo -e "${YELLOW}    ℹ️  Using localhost${NC}"
+    echo -e "${YELLOW}    ℹ localhost${NC}"
 fi
 echo ""
 
-# ───────────────────────────────────────────────
-# 7. Install Docker (auto-detect)
-# ───────────────────────────────────────────────
+# ── Install Docker ──
 echo -e "${BOLD}🐳  Docker${NC}"
 
 if command -v docker &> /dev/null && docker compose version &> /dev/null; then
-    echo -e "${GREEN}✅  Docker already installed${NC}"
+    echo -e "${GREEN}    ✓ Already installed${NC}"
 else
-    echo "    Installing Docker..."
+    echo "    Installing..."
     $SUDO apt-get update -qq
     $SUDO apt-get install -y -qq ca-certificates curl gnupg lsb-release
     $SUDO install -m 0755 -d /etc/apt/keyrings
@@ -148,14 +131,12 @@ else
     $SUDO apt-get update -qq
     $SUDO apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     $SUDO usermod -aG docker "$USER" 2>/dev/null || true
-    echo -e "${GREEN}✅  Docker installed${NC}"
-    echo -e "${YELLOW}    ⚠️  Log out and back in if this is your first Docker install.${NC}"
+    echo -e "${GREEN}    ✓ Installed${NC}"
+    echo -e "${YELLOW}    ⚠ Log out and back in if this is your first Docker install${NC}"
 fi
 echo ""
 
-# ───────────────────────────────────────────────
-# 8. Generate configs
-# ───────────────────────────────────────────────
+# ── Generate Configs ──
 echo -e "${BOLD}📦  Generating configs...${NC}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -163,7 +144,7 @@ cd "$SCRIPT_DIR"
 
 # docker-compose.yml
 if [ "$METHOD" == "cloudflare" ]; then
-    if [ -n "$DB_VOLUME" ]; then
+    if [ "$USE_DOCKER_VOLUME" = true ]; then
         cat > docker-compose.yml << EOF
 version: "3.8"
 
@@ -214,7 +195,7 @@ services:
       - DB_PATH=/app/data/urls.db
       - MAX_LINKS=10000
     volumes:
-      - ${DB_PATH}:/app/data
+      - ${DB_HOST_PATH}:/app/data
     restart: unless-stopped
     networks:
       - cloak-net
@@ -234,8 +215,8 @@ networks:
 EOF
     fi
 else
-    # Nginx method
-    if [ -n "$DB_VOLUME" ]; then
+    # Nginx
+    if [ "$USE_DOCKER_VOLUME" = true ]; then
         cat > docker-compose.yml << EOF
 version: "3.8"
 
@@ -277,7 +258,7 @@ services:
       - DB_PATH=/app/data/urls.db
       - MAX_LINKS=10000
     volumes:
-      - ${DB_PATH}:/app/data
+      - ${DB_HOST_PATH}:/app/data
     restart: unless-stopped
     networks:
       - cloak-net
@@ -289,15 +270,13 @@ EOF
     fi
 fi
 
-# .env file
+# .env - use DB_HOST_PATH for clarity (host-side path reference)
 cat > .env << EOF
-# Cloak.URL configuration
-# Restart with: docker compose up -d
-
+# Cloak.URL — edit and restart with: docker compose up -d
 METHOD=${METHOD}
 BASE_URL=${BASE_URL}
 PORT=${PORT}
-DB_PATH=${DB_PATH}
+DB_HOST_PATH=${DB_HOST_PATH}
 EOF
 
 if [ "$METHOD" == "cloudflare" ]; then
@@ -361,26 +340,21 @@ for conf in "$SCRIPT_DIR"/*.conf; do
 done
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl restart nginx
-echo "✅ Nginx ready. Run: sudo certbot --nginx  for HTTPS"
+echo "✅ Nginx ready. Run: sudo certbot --nginx for HTTPS"
 EOF
     chmod +x "$NGINX_DIR/install-nginx.sh"
 fi
 
-echo -e "${GREEN}✅  Configs generated${NC}"
+echo -e "${GREEN}    ✓ Done${NC}"
 echo ""
 
-# ───────────────────────────────────────────────
-# 9. Build & Start
-# ───────────────────────────────────────────────
+# ── Build & Start ──
 echo -e "${BOLD}🚀  Starting Cloak.URL...${NC}"
 
 if docker compose version &> /dev/null; then
     COMPOSE_CMD="docker compose"
-elif docker-compose version &> /dev/null; then
-    COMPOSE_CMD="docker-compose"
 else
-    echo -e "${RED}❌ Docker Compose not found.${NC}"
-    exit 1
+    COMPOSE_CMD="docker-compose"
 fi
 
 $COMPOSE_CMD down 2>/dev/null || true
@@ -389,28 +363,36 @@ $COMPOSE_CMD build --no-cache
 $COMPOSE_CMD up -d
 
 echo ""
-echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  ✅  Cloak.URL is running!${NC}"
-echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-echo ""
-echo -e "${BOLD}    URL:${NC}      $BASE_URL"
-echo -e "${BOLD}    Method:${NC}    $METHOD"
-echo -e "${BOLD}    DB:${NC}       $DB_PATH"
+
+# ── FINAL OUTPUT ──
+echo -e "${GREEN}┌────────────────────────────────────────┐${NC}"
+echo -e "${GREEN}│  ✅  Cloak.URL is running              │${NC}"
+echo -e "${GREEN}└────────────────────────────────────────┘${NC}"
 echo ""
 
-if [ "$METHOD" == "cloudflare" ] && [ "$tunnel_token" != "YOUR_TUNNEL_TOKEN_HERE" ]; then
-    echo -e "    ${YELLOW}Next:${NC} Add Public Hostname in Cloudflare Dashboard"
-    echo -e "         $domain → http://cloak:3000"
-elif [ "$METHOD" == "nginx" ]; then
-    echo -e "    ${YELLOW}Next:${NC} sudo bash nginx/install-nginx.sh"
+printf "  ${BOLD}%-12s${NC} %s\n" "URL:" "$BASE_URL"
+printf "  ${BOLD}%-12s${NC} %s\n" "Method:" "$METHOD"
+printf "  ${BOLD}%-12s${NC} %s\n" "Host DB:" "$DB_HOST_PATH"
+printf "  ${BOLD}%-12s${NC} %s\n" "Container:" "/app/data/urls.db"
+echo ""
+
+if [ "$METHOD" == "cloudflare" ] && [ "$tunnel_token" != "YOUR_TUNNEL_TOKEN_HERE" ] && [ -n "$domain" ]; then
+    echo -e "  ${YELLOW}Next step:${NC}"
+    echo -e "    Cloudflare Dashboard → Networks → Tunnels"
+    echo -e "    Add hostname: ${BOLD}$domain${NC} → ${BOLD}http://cloak:3000${NC}"
+    echo ""
+elif [ "$METHOD" == "nginx" ] && [ -n "$domain" ]; then
+    echo -e "  ${YELLOW}Next step:${NC}"
+    echo -e "    ${BOLD}sudo bash nginx/install-nginx.sh${NC}"
+    echo ""
 fi
 
+echo -e "  ${BOLD}Commands:${NC}"
+echo -e "    ${BOLD}logs${NC}     $COMPOSE_CMD logs -f"
+echo -e "    ${BOLD}stop${NC}     $COMPOSE_CMD down"
+echo -e "    ${BOLD}restart${NC}  $COMPOSE_CMD restart"
+echo -e "    ${BOLD}config${NC}   nano .env && $COMPOSE_CMD up -d"
 echo ""
-echo -e "${BOLD}Commands:${NC}"
-echo -e "  logs:    ${BOLD}$COMPOSE_CMD logs -f${NC}"
-echo -e "  stop:    ${BOLD}$COMPOSE_CMD down${NC}"
-echo -e "  restart: ${BOLD}$COMPOSE_CMD restart${NC}"
-echo -e "  config:  ${BOLD}nano .env && $COMPOSE_CMD up -d${NC}"
-echo ""
-echo -e "${BLUE}    Built for privacy. No analytics. No tracking. Just links.${NC}"
+
+echo -e "  ${DIM}Built for privacy. No analytics. No tracking. Just links.${NC}"
 echo ""
