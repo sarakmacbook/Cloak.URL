@@ -15,14 +15,14 @@
 
 ```bash
 # Download with wget
-wget -q https://raw.githubusercontent.com/you/Cloak.URL/main/install.sh -O install.sh
+wget -q https://raw.githubusercontent.com/sarakmacbook/Cloak.URL/main/install.sh -O install.sh
 bash install.sh
 ```
 
 Or clone and run:
 
 ```bash
-git clone https://github.com/yourusername/Cloak.URL.git
+git clone https://github.com/sarakmacbook/Cloak.URL.git
 cd Cloak.URL
 bash install.sh
 ```
@@ -32,7 +32,7 @@ The installer asks **3 questions** (all have defaults):
 | Question | Default | What it does |
 |----------|---------|--------------|
 | **Deployment method** | Cloudflare Tunnel | `1` = Tunnel (no open ports), `2` = Nginx |
-| **Port** | `3000` | Internal Docker port |
+| **Port** | `3000` | Host port (maps to container port 3000) |
 | **Database location** | `./data` | Where SQLite DB lives |
 | **Domain** | `localhost` | Your public domain |
 
@@ -90,6 +90,8 @@ bash install.sh
 
 **Add hostname:** In Cloudflare dashboard → Public Hostname → `mybrand.com` → `http://cloak:3000`
 
+> **Note:** Use container port `3000` for the tunnel, not your custom host port.
+
 ### Nginx
 
 For VPS with static IP.
@@ -130,8 +132,8 @@ docker compose up -d
 |----------|---------|-------------|
 | `METHOD` | `cloudflare` | `cloudflare` or `nginx` |
 | `BASE_URL` | `http://localhost:3000` | Your domain |
-| `PORT` | `3000` | Internal port |
-| `DB_PATH` | `./data` | Database location |
+| `PORT` | `3000` | Host port |
+| `DB_HOST_PATH` | `./data` | Host database directory |
 | `TUNNEL_TOKEN` | — | Cloudflare token |
 
 ---
