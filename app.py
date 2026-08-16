@@ -404,7 +404,7 @@ def main():
     init_db()
     cleanup_expired()
     server = HTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"🔐 cloak.link running at {BASE_URL}")
+    print(f"🔐 Cloak.URL running at {BASE_URL}")
     print(f"📁 Database: {os.path.abspath(DB_PATH)}")
     print(f"🚫 Zero tracking · Zero analytics · Zero logs")
     print(f"🔢 Max links: {MAX_LINKS}")
