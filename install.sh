@@ -277,6 +277,8 @@ METHOD=${METHOD}
 BASE_URL=${BASE_URL}
 PORT=${PORT}
 DB_HOST_PATH=${DB_HOST_PATH}
+# Note: Container internal port is always 3000
+# Host port ${PORT} maps to container port 3000
 EOF
 
 if [ "$METHOD" == "cloudflare" ]; then
@@ -370,16 +372,23 @@ echo -e "${GREEN}│  ✅  Cloak.URL is running              │${NC}"
 echo -e "${GREEN}└────────────────────────────────────────┘${NC}"
 echo ""
 
-printf "  ${BOLD}%-12s${NC} %s\n" "URL:" "$BASE_URL"
-printf "  ${BOLD}%-12s${NC} %s\n" "Method:" "$METHOD"
-printf "  ${BOLD}%-12s${NC} %s\n" "Host DB:" "$DB_HOST_PATH"
-printf "  ${BOLD}%-12s${NC} %s\n" "Container:" "/app/data/urls.db"
+printf "  ${BOLD}%-14s${NC} %s\n" "URL:" "$BASE_URL"
+printf "  ${BOLD}%-14s${NC} %s\n" "Method:" "$METHOD"
+printf "  ${BOLD}%-14s${NC} %s\n" "Host Port:" "$PORT"
+printf "  ${BOLD}%-14s${NC} %s\n" "Container Port:" "3000"
+printf "  ${BOLD}%-14s${NC} %s\n" "Host DB:" "$DB_HOST_PATH"
+printf "  ${BOLD}%-14s${NC} %s\n" "Container DB:" "/app/data/urls.db"
 echo ""
 
 if [ "$METHOD" == "cloudflare" ] && [ "$tunnel_token" != "YOUR_TUNNEL_TOKEN_HERE" ] && [ -n "$domain" ]; then
-    echo -e "  ${YELLOW}Next step:${NC}"
-    echo -e "    Cloudflare Dashboard → Networks → Tunnels"
+    echo -e "  ${YELLOW}Cloudflare Tunnel Setup:${NC}"
+    echo -e "    Dashboard → Networks → Tunnels → Your Tunnel"
     echo -e "    Add hostname: ${BOLD}$domain${NC} → ${BOLD}http://cloak:3000${NC}"
+    echo -e "    ${DIM}(Use container port 3000, not host port $PORT)${NC}"
+    echo ""
+elif [ "$METHOD" == "cloudflare" ] && [ "$tunnel_token" == "YOUR_TUNNEL_TOKEN_HERE" ]; then
+    echo -e "  ${YELLOW}⚠️  Cloudflare token not set!${NC}"
+    echo -e "    Edit .env and add your TUNNEL_TOKEN, then restart."
     echo ""
 elif [ "$METHOD" == "nginx" ] && [ -n "$domain" ]; then
     echo -e "  ${YELLOW}Next step:${NC}"

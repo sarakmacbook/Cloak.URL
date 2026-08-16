@@ -14,8 +14,8 @@
 ## 🚀 One-Click Install
 
 ```bash
-# Download
-curl -fsSL https://raw.githubusercontent.com/you/Cloak.URL/main/install.sh -o install.sh
+# Download with wget
+wget -q https://raw.githubusercontent.com/you/Cloak.URL/main/install.sh -O install.sh
 bash install.sh
 ```
 
@@ -139,9 +139,9 @@ docker compose up -d
 ## 🔌 API
 
 ```bash
-curl -X POST https://mybrand.com/api/shorten \
-  -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","path_prefix":"blog","custom_code":"post-2026"}'
+wget -qO- https://mybrand.com/api/shorten \
+  --post-data='{"url":"https://example.com","path_prefix":"blog","custom_code":"post-2026"}' \
+  --header="Content-Type: application/json"
 ```
 
 ---
