@@ -368,6 +368,12 @@ fi
 # Ensure we run from the project directory
 cd "$WORK_DIR"
 
+# Remove any stray .env files that docker compose might pick up
+rm -f "$HOME/.env" 2>/dev/null || true
+
+# Create empty .env in project dir to prevent docker compose from walking up
+> .env
+
 $COMPOSE_CMD down 2>/dev/null || true
 $COMPOSE_CMD pull 2>/dev/null || true
 $COMPOSE_CMD build --no-cache
