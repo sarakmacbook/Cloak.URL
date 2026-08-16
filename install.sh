@@ -1,6 +1,5 @@
 #!/bin/bash
 # Cloak.URL One-Click Installer
-
 set -e
 
 BOLD='\033[1m'
@@ -68,7 +67,6 @@ if [ "$db_choice" == "2" ]; then
 elif [ "$db_choice" == "3" ]; then
     read -p "    Enter directory path (not file path): " custom_db_path
     if [ -n "$custom_db_path" ]; then
-        # Ensure it's a directory path, not a file path
         DB_HOST_PATH="$custom_db_path"
         $SUDO mkdir -p "$DB_HOST_PATH" 2>/dev/null || true
         echo -e "${GREEN}    ✓ $DB_HOST_PATH${NC}"
@@ -90,9 +88,10 @@ if [ "$METHOD" == "cloudflare" ]; then
     echo ""
     read -p "    Paste token (or Enter to skip): " tunnel_token
     if [ -z "$tunnel_token" ]; then
-        tunnel_token="YOUR_TUNNEL_TOKEN_HERE"
-        echo -e "${YELLOW}    ⚠ Skipped — edit .env later${NC}"
+        TUNNEL_TOKEN=""
+        echo -e "${YELLOW}    ⚠ Skipped — tunnel will not start${NC}"
     else
+        TUNNEL_TOKEN="$tunnel_token"
         echo -e "${GREEN}    ✓ Token saved${NC}"
     fi
     echo ""
@@ -139,50 +138,48 @@ echo ""
 # ── Generate Configs ──
 echo -e "${BOLD}📦  Generating configs...${NC}"
 
-# Use current working directory (where user ran the script)
 WORK_DIR="$(pwd)"
 
-# If install.sh is in a different location, warn the user
-SCRIPT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ "$SCRIPT_SRC" != "$WORK_DIR" ]; then
-    echo -e "${YELLOW}    ⚠ install.sh is at $SCRIPT_SRC but creating files in $WORK_DIR${NC}"
-fi
-
-cd "$WORK_DIR"
-
-# docker-compose.yml
-if [ "$METHOD" == "cloudflare" ]; then
+# Generate docker-compose.yml
+if [ "$METHOD" == "cloudflare" ] && [ -n "$TUNNEL_TOKEN" ]; then
+    # With tunnel
     if [ "$USE_DOCKER_VOLUME" = true ]; then
         cat > docker-compose.yml << EOF
-version: "3.8"
-
 services:
   cloak:
     build: .
     ports:
-      - "127.0.0.1:${PORT}:3000"
+      - "127.0.0.1:$PORT:3000"
     environment:
       - PORT=3000
-      - BASE_URL=${BASE_URL}
+      - BASE_URL=$BASE_URL
       - DB_PATH=/app/data/urls.db
       - MAX_LINKS=10000
     volumes:
-      - ${DB_VOLUME}:/app/data
+      - $DB_VOLUME:/app/data
     restart: unless-stopped
     networks:
       - cloak-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel run
     environment:
-      - TUNNEL_TOKEN=${tunnel_token}
+      - TUNNEL_TOKEN=$TUNNEL_TOKEN
     networks:
       - cloak-net
+    depends_on:
+      cloak:
+        condition: service_healthy
 
 volumes:
-  ${DB_VOLUME}:
+  $DB_VOLUME:
 
 networks:
   cloak-net:
@@ -190,32 +187,38 @@ networks:
 EOF
     else
         cat > docker-compose.yml << EOF
-version: "3.8"
-
 services:
   cloak:
     build: .
     ports:
-      - "127.0.0.1:${PORT}:3000"
+      - "127.0.0.1:$PORT:3000"
     environment:
       - PORT=3000
-      - BASE_URL=${BASE_URL}
+      - BASE_URL=$BASE_URL
       - DB_PATH=/app/data/urls.db
       - MAX_LINKS=10000
     volumes:
-      - ${DB_HOST_PATH}:/app/data
+      - $DB_HOST_PATH:/app/data
     restart: unless-stopped
     networks:
       - cloak-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel run
     environment:
-      - TUNNEL_TOKEN=${tunnel_token}
+      - TUNNEL_TOKEN=$TUNNEL_TOKEN
     networks:
       - cloak-net
+    depends_on:
+      cloak:
+        condition: service_healthy
 
 networks:
   cloak-net:
@@ -223,29 +226,32 @@ networks:
 EOF
     fi
 else
-    # Nginx
+    # Without tunnel (nginx or no tunnel token)
     if [ "$USE_DOCKER_VOLUME" = true ]; then
         cat > docker-compose.yml << EOF
-version: "3.8"
-
 services:
   cloak:
     build: .
     ports:
-      - "127.0.0.1:${PORT}:3000"
+      - "127.0.0.1:$PORT:3000"
     environment:
       - PORT=3000
-      - BASE_URL=${BASE_URL}
+      - BASE_URL=$BASE_URL
       - DB_PATH=/app/data/urls.db
       - MAX_LINKS=10000
     volumes:
-      - ${DB_VOLUME}:/app/data
+      - $DB_VOLUME:/app/data
     restart: unless-stopped
     networks:
       - cloak-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
-  ${DB_VOLUME}:
+  $DB_VOLUME:
 
 networks:
   cloak-net:
@@ -253,35 +259,32 @@ networks:
 EOF
     else
         cat > docker-compose.yml << EOF
-version: "3.8"
-
 services:
   cloak:
     build: .
     ports:
-      - "127.0.0.1:${PORT}:3000"
+      - "127.0.0.1:$PORT:3000"
     environment:
       - PORT=3000
-      - BASE_URL=${BASE_URL}
+      - BASE_URL=$BASE_URL
       - DB_PATH=/app/data/urls.db
       - MAX_LINKS=10000
     volumes:
-      - ${DB_HOST_PATH}:/app/data
+      - $DB_HOST_PATH:/app/data
     restart: unless-stopped
     networks:
       - cloak-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   cloak-net:
     driver: bridge
 EOF
     fi
-fi
-
-# Export variables for docker compose substitution
-export METHOD PORT BASE_URL DB_HOST_PATH DB_VOLUME
-if [ "$METHOD" == "cloudflare" ]; then
-    export TUNNEL_TOKEN
 fi
 
 # Nginx configs
@@ -330,8 +333,8 @@ NGINX_EOF
 set -e
 if [ "$EUID" -ne 0 ]; then echo "Run as root or with sudo"; exit 1; fi
 apt-get update -qq && apt-get install -y -qq nginx
-WORK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for conf in "$WORK_DIR"/*.conf; do
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for conf in "$SCRIPT_DIR"/*.conf; do
     [ -e "$conf" ] || continue
     bn=$(basename "$conf")
     cp "$conf" "/etc/nginx/sites-available/$bn"
@@ -356,28 +359,37 @@ else
     COMPOSE_CMD="docker-compose"
 fi
 
-# Export all variables so docker-compose can substitute them
-export METHOD PORT BASE_URL DB_HOST_PATH
-if [ "$USE_DOCKER_VOLUME" = true ]; then
-    export DB_VOLUME
-fi
-if [ "$METHOD" == "cloudflare" ]; then
-    export TUNNEL_TOKEN
-fi
-
-# Ensure we run from the project directory
 cd "$WORK_DIR"
 
-# Remove any stray .env files that docker compose might pick up
-rm -f "$HOME/.env" 2>/dev/null || true
-
-# Create empty .env in project dir to prevent docker compose from walking up
-> .env
-
+# Stop old containers gracefully
 $COMPOSE_CMD down 2>/dev/null || true
-$COMPOSE_CMD pull 2>/dev/null || true
+
+# Build and start
 $COMPOSE_CMD build --no-cache
 $COMPOSE_CMD up -d
+
+# Wait for healthcheck
+echo ""
+echo -e "${BOLD}⏳  Waiting for service to start...${NC}"
+sleep 3
+
+# Check if cloak is running
+if docker ps | grep -q "cloak"; then
+    echo -e "${GREEN}    ✓ Cloak container is running${NC}"
+else
+    echo -e "${RED}    ✗ Cloak container failed to start${NC}"
+    echo -e "    ${DIM}Run: $COMPOSE_CMD logs cloak${NC}"
+fi
+
+# Check if tunnel is running (if applicable)
+if [ "$METHOD" == "cloudflare" ] && [ -n "$TUNNEL_TOKEN" ]; then
+    if docker ps | grep -q "tunnel"; then
+        echo -e "${GREEN}    ✓ Tunnel container is running${NC}"
+    else
+        echo -e "${YELLOW}    ⚠ Tunnel container is not running${NC}"
+        echo -e "    ${DIM}Run: $COMPOSE_CMD logs tunnel${NC}"
+    fi
+fi
 
 echo ""
 
@@ -395,15 +407,15 @@ printf "  ${BOLD}%-14s${NC} %s\n" "Host DB:" "$DB_HOST_PATH"
 printf "  ${BOLD}%-14s${NC} %s\n" "Container DB:" "/app/data/urls.db"
 echo ""
 
-if [ "$METHOD" == "cloudflare" ] && [ "$tunnel_token" != "YOUR_TUNNEL_TOKEN_HERE" ] && [ -n "$domain" ]; then
+if [ "$METHOD" == "cloudflare" ] && [ -n "$TUNNEL_TOKEN" ] && [ -n "$domain" ]; then
     echo -e "  ${YELLOW}Cloudflare Tunnel Setup:${NC}"
     echo -e "    Dashboard → Networks → Tunnels → Your Tunnel"
     echo -e "    Add hostname: ${BOLD}$domain${NC} → ${BOLD}http://cloak:3000${NC}"
-    echo -e "    ${DIM}(Use container port 3000, not host port $PORT)${NC}"
     echo ""
-elif [ "$METHOD" == "cloudflare" ] && [ "$tunnel_token" == "YOUR_TUNNEL_TOKEN_HERE" ]; then
-    echo -e "  ${YELLOW}⚠️  Cloudflare token not set!${NC}"
-    echo -e "    Edit .env and add your TUNNEL_TOKEN, then restart."
+elif [ "$METHOD" == "cloudflare" ] && [ -z "$TUNNEL_TOKEN" ]; then
+    echo -e "  ${YELLOW}⚠️  No Cloudflare token set${NC}"
+    echo -e "    Your app is running on http://localhost:$PORT only."
+    echo -e "    To add a tunnel later, edit docker-compose.yml and restart."
     echo ""
 elif [ "$METHOD" == "nginx" ] && [ -n "$domain" ]; then
     echo -e "  ${YELLOW}Next step:${NC}"

@@ -11,15 +11,18 @@
 
 ---
 
-## 🚀 One-Click Install
+## 🚀 Quick Install
+
+### Option 1: Download ZIP (Recommended)
 
 ```bash
-# Download with wget
-wget -q https://raw.githubusercontent.com/sarakmacbook/Cloak.URL/main/install.sh -O install.sh
+wget -q https://github.com/sarakmacbook/Cloak.URL/archive/refs/heads/main.zip -O cloak-url.zip
+unzip -q cloak-url.zip
+cd Cloak.URL-main
 bash install.sh
 ```
 
-Or clone and run:
+### Option 2: Git Clone
 
 ```bash
 git clone https://github.com/sarakmacbook/Cloak.URL.git
@@ -27,7 +30,7 @@ cd Cloak.URL
 bash install.sh
 ```
 
-The installer asks **3 questions** (all have defaults):
+The installer asks **4 questions** (all have defaults):
 
 | Question | Default | What it does |
 |----------|---------|--------------|
@@ -121,10 +124,10 @@ With expiration: mybrand.com/go/sale
 
 ## ⚙️ Configuration
 
-Edit `.env` and restart:
+Edit `docker-compose.yml` and restart:
 
 ```bash
-nano .env
+nano docker-compose.yml
 docker compose up -d
 ```
 
