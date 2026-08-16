@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shorten — Private URL Shortener</title>
+<title>cloak.link — Private URL Shortener</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -97,6 +97,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 .tag.pw { background: rgba(239,68,68,0.1); color: var(--danger); }
 .tag.exp { background: rgba(245,158,11,0.1); color: var(--warning); }
 .tag.dom { background: rgba(59,130,246,0.1); color: var(--primary); }
+.tag.path { background: rgba(139,92,246,0.1); color: #8b5cf6; }
 .copy-btn { padding: 10px 20px; font-size: 14px; }
 .copy-btn.copied { background: var(--success); }
 .error {
@@ -138,6 +139,10 @@ button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     color: white; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
 }
 .domain-badge.global { background: var(--text-secondary); }
+.path-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 6px; background: #8b5cf6;
+    color: white; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+}
 .recent-long {
     font-size: 13px; color: var(--text-secondary);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -164,7 +169,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 <body>
 <div class="container">
     <header>
-        <div class="logo"><div class="logo-icon">🔗</div>Shorten</div>
+        <div class="logo"><div class="logo-icon">🔗</div>cloak.link</div>
         <p class="subtitle">Private, self-hosted URL shortener</p>
         <div class="privacy-badge">
             <span>🛡️</span> Zero tracking · Zero logs · Zero analytics
@@ -189,18 +194,24 @@ button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
             <div class="advanced-row">
                 <div class="field">
                     <label>Custom Domain</label>
-                    <input type="text" id="domainInput" placeholder="e.g. go.mybrand.com">
+                    <input type="text" id="domainInput" placeholder="e.g. mybrand.com">
                 </div>
                 <div class="field">
-                    <label>Custom Code</label>
-                    <input type="text" id="codeInput" placeholder="e.g. launch2026">
+                    <label>Path Prefix</label>
+                    <input type="text" id="pathInput" placeholder="e.g. blog, go, links">
                 </div>
             </div>
             <div class="advanced-row">
                 <div class="field">
+                    <label>Custom Code</label>
+                    <input type="text" id="codeInput" placeholder="e.g. launch2026">
+                </div>
+                <div class="field">
                     <label>Password Protection</label>
                     <input type="password" id="pwdInput" placeholder="Leave empty for no password">
                 </div>
+            </div>
+            <div class="advanced-row">
                 <div class="field">
                     <label>Auto-Expire</label>
                     <select id="expireInput">
@@ -248,6 +259,7 @@ const resultTags = document.getElementById('resultTags');
 const error = document.getElementById('error');
 const copyBtn = document.getElementById('copyBtn');
 const domainInput = document.getElementById('domainInput');
+const pathInput = document.getElementById('pathInput');
 const codeInput = document.getElementById('codeInput');
 const pwdInput = document.getElementById('pwdInput');
 const expireInput = document.getElementById('expireInput');
@@ -255,8 +267,8 @@ const advancedPanel = document.getElementById('advancedPanel');
 const advIcon = document.getElementById('advIcon');
 
 urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
-
 domainInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
+pathInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
 codeInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
 pwdInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') shorten(); });
 
@@ -275,10 +287,12 @@ async function shorten() {
 
     const payload = { url };
     const domain = domainInput.value.trim();
+    const pathPrefix = pathInput.value.trim();
     const customCode = codeInput.value.trim();
     const password = pwdInput.value;
     const expires = expireInput.value;
     if (domain) payload.domain = domain;
+    if (pathPrefix) payload.path_prefix = pathPrefix;
     if (customCode) payload.custom_code = customCode;
     if (password) payload.password = password;
     if (expires) payload.expires = expires;
@@ -294,8 +308,12 @@ async function shorten() {
         if (!res.ok) throw new Error(data.error || 'Something went wrong');
 
         resultUrl.textContent = data.short_url;
-        const meta = data.domain ? `Domain: ${data.domain} · Code: ${data.code}` : `Code: ${data.code}`;
-        resultMeta.textContent = meta;
+
+        const parts = [];
+        if (data.domain) parts.push(`Domain: ${data.domain}`);
+        if (data.path_prefix) parts.push(`Path: /${data.path_prefix}`);
+        parts.push(`Code: ${data.code}`);
+        resultMeta.textContent = parts.join(' · ');
 
         const tags = [];
         if (password) tags.push('<span class="tag pw">🔒 Password</span>');
@@ -305,6 +323,7 @@ async function shorten() {
             tags.push(`<span class="tag exp">⏱️ ${label}</span>`);
         }
         if (domain) tags.push(`<span class="tag dom">🌐 ${escapeHtml(domain)}</span>`);
+        if (pathPrefix) tags.push(`<span class="tag path">📁 /${escapeHtml(pathPrefix)}</span>`);
         resultTags.innerHTML = tags.join('');
 
         result.classList.add('show');
@@ -312,6 +331,7 @@ async function shorten() {
         copyBtn.classList.remove('copied');
         urlInput.value = '';
         domainInput.value = '';
+        pathInput.value = '';
         codeInput.value = '';
         pwdInput.value = '';
         expireInput.value = '';
@@ -366,6 +386,7 @@ async function loadRecent() {
         list.innerHTML = urls.map(u => {
             const isCustom = u.domain && u.domain !== baseHost;
             const badge = isCustom ? `<span class="domain-badge">${escapeHtml(u.domain)}</span>` : `<span class="domain-badge global">default</span>`;
+            const pathBadge = u.path_prefix ? `<span class="path-badge">/${escapeHtml(u.path_prefix)}</span>` : '';
             const tags = [];
             if (u.has_password) tags.push('<span class="tag pw">🔒</span>');
             if (u.expires) {
@@ -378,7 +399,7 @@ async function loadRecent() {
             return `
             <div class="recent-item">
                 <div class="recent-url">
-                    <div class="recent-short">${escapeHtml(u.short_url)} ${badge}</div>
+                    <div class="recent-short">${escapeHtml(u.short_url)} ${badge}${pathBadge}</div>
                     <div class="recent-long">${escapeHtml(u.url)}</div>
                     <div class="recent-tags">${tags.join('')}</div>
                 </div>

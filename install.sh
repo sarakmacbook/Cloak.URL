@@ -1,6 +1,7 @@
 #!/bin/bash
 # cloak.link Interactive Installer
-# Supports both nginx and Cloudflare Tunnel methods
+# Supports both Cloudflare Tunnel and Nginx
+# URL format: domain.com/custom (path prefix) not custom.domain.com
 
 set -e
 
@@ -15,6 +16,7 @@ NC='\033[0m'
 echo ""
 echo -e "${BOLD}🔗  Welcome to cloak.link installer${NC}"
 echo -e "${BLUE}    Private URL shortener — zero tracking, zero logs${NC}"
+echo -e "${CYAN}    URL format: yourdomain.com/blog/code (not blog.yourdomain.com)${NC}"
 echo ""
 
 # ───────────────────────────────────────────────
@@ -68,20 +70,15 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; th
     PORT=3000
 fi
 
-# Check if port is already in use (only for nginx method, cloudflare uses localhost)
 if [ "$METHOD" == "nginx" ]; then
     if command -v ss &> /dev/null && ss -tlnp | grep -q ":$PORT "; then
         echo -e "${YELLOW}⚠️  Port $PORT is already in use.${NC}"
         read -p "    Continue anyway? [y/N]: " port_continue
-        if [[ ! "$port_continue" =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+        if [[ ! "$port_continue" =~ ^[Yy]$ ]]; then exit 1; fi
     elif command -v netstat &> /dev/null && netstat -tlnp 2>/dev/null | grep -q ":$PORT "; then
         echo -e "${YELLOW}⚠️  Port $PORT is already in use.${NC}"
         read -p "    Continue anyway? [y/N]: " port_continue
-        if [[ ! "$port_continue" =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+        if [[ ! "$port_continue" =~ ^[Yy]$ ]]; then exit 1; fi
     fi
 fi
 
@@ -89,7 +86,7 @@ echo -e "${GREEN}✅  Port set to: $PORT${NC}"
 echo ""
 
 # ───────────────────────────────────────────────
-# 4. Cloudflare Tunnel Token (if method 1)
+# 4. Cloudflare Tunnel Token
 # ───────────────────────────────────────────────
 TUNNEL_TOKEN=""
 
@@ -105,14 +102,11 @@ if [ "$METHOD" == "cloudflare" ]; then
     echo -e "    5. Choose ${BOLD}Docker${NC} as environment"
     echo -e "    6. Copy the ${BOLD}TUNNEL TOKEN${NC}"
     echo ""
-
     read -p "    Paste your Cloudflare Tunnel token: " tunnel_token
-
     if [ -z "$tunnel_token" ]; then
         echo -e "${YELLOW}⚠️  No token provided. You'll need to add it manually later.${NC}"
         tunnel_token="YOUR_TUNNEL_TOKEN_HERE"
     fi
-
     echo -e "${GREEN}✅  Tunnel token configured${NC}"
     echo ""
 fi
@@ -122,20 +116,14 @@ fi
 # ───────────────────────────────────────────────
 echo -e "${BOLD}🌐  Step 4: Custom Domain (Optional)${NC}"
 echo "    Enter the domain for your short links."
-
-if [ "$METHOD" == "cloudflare" ]; then
-    echo "    This sets BASE_URL for generated short links."
-else
-    echo "    You'll need to point DNS to this server and configure nginx."
-fi
-
+echo "    URL format will be: yourdomain.com/CODE"
+echo "    Or with path prefix: yourdomain.com/blog/CODE"
 echo "    Press Enter to skip and use localhost."
 echo ""
 
 DOMAINS=()
 BASE_URL="http://localhost:$PORT"
 
-# First domain
 read -p "    Domain 1 (or press Enter to skip): " domain
 
 if [ -z "$domain" ]; then
@@ -150,28 +138,16 @@ else
     fi
 fi
 
-# Ask "add more?" loop (up to 9 more, total 10)
 while [ ${#DOMAINS[@]} -lt 10 ]; do
     echo ""
     read -p "    Do you want to add another domain? [y/N]: " add_more
-
-    if [[ ! "$add_more" =~ ^[Yy]$ ]]; then
-        break
-    fi
-
+    if [[ ! "$add_more" =~ ^[Yy]$ ]]; then break; fi
     next_num=$((${#DOMAINS[@]} + 1))
     read -p "    Domain $next_num: " domain
-
-    if [ -z "$domain" ]; then
-        echo -e "${YELLOW}    Skipped.${NC}"
-        continue
-    fi
-
+    if [ -z "$domain" ]; then echo -e "${YELLOW}    Skipped.${NC}"; continue; fi
     if [[ ! "$domain" =~ ^[a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)+$ ]]; then
-        echo -e "${RED}    ❌ Invalid domain format. Skipping.${NC}"
-        continue
+        echo -e "${RED}    ❌ Invalid domain format. Skipping.${NC}"; continue
     fi
-
     DOMAINS+=("$domain")
     echo -e "${GREEN}    ✅ Domain $next_num added: $domain${NC}"
 done
@@ -179,14 +155,12 @@ done
 if [ ${#DOMAINS[@]} -gt 0 ]; then
     echo ""
     echo -e "${BOLD}    Configured domains:${NC}"
-    for d in "${DOMAINS[@]}"; do
-        echo -e "      • $d"
-    done
+    for d in "${DOMAINS[@]}"; do echo -e "      • $d"; done
 fi
 echo ""
 
 # ───────────────────────────────────────────────
-# 6. Install Docker if needed
+# 6. Install Docker
 # ───────────────────────────────────────────────
 echo -e "${BOLD}🐳  Step 5: Installing Docker${NC}"
 
@@ -196,18 +170,13 @@ else
     echo "    Installing Docker..."
     sudo apt-get update -qq
     sudo apt-get install -y -qq ca-certificates curl gnupg lsb-release
-
     sudo install -m 0755 -d /etc/apt/keyrings
     sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
     sudo chmod a+r /etc/apt/keyrings/docker.asc
-
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
     sudo apt-get update -qq
     sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
     sudo usermod -aG docker "$USER" 2>/dev/null || true
-
     echo -e "${GREEN}✅  Docker installed${NC}"
     echo -e "${YELLOW}⚠️  You may need to log out and back in for docker group changes.${NC}"
 fi
@@ -227,7 +196,6 @@ if [ -f docker-compose.yml ]; then
 fi
 
 if [ "$METHOD" == "cloudflare" ]; then
-    # Cloudflare Tunnel docker-compose
     cat > docker-compose.yml << EOF
 version: "3.8"
 
@@ -261,7 +229,6 @@ networks:
     driver: bridge
 EOF
 else
-    # Nginx docker-compose (no tunnel)
     cat > docker-compose.yml << EOF
 version: "3.8"
 
@@ -290,7 +257,7 @@ fi
 echo -e "${GREEN}✅  docker-compose.yml created${NC}"
 
 # ───────────────────────────────────────────────
-# 8. Generate Nginx configs (if nginx method)
+# 8. Generate Nginx configs (nginx method)
 # ───────────────────────────────────────────────
 if [ "$METHOD" == "nginx" ] && [ ${#DOMAINS[@]} -gt 0 ]; then
     echo ""
@@ -305,6 +272,27 @@ server {
     listen 80;
     server_name DOMAIN_PLACEHOLDER;
 
+    # Handle path prefixes like /blog, /go, /links
+    location ~ ^/([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)$ {
+        proxy_pass http://localhost:PORT_PLACEHOLDER/$1/$2;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Handle simple short codes like /abc123
+    location ~ ^/([a-zA-Z0-9_-]+)$ {
+        proxy_pass http://localhost:PORT_PLACEHOLDER/$1;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # API and frontend
     location / {
         proxy_pass http://localhost:PORT_PLACEHOLDER;
         proxy_http_version 1.1;
@@ -377,6 +365,8 @@ cat > .env << EOF
 METHOD=${METHOD}
 
 # Your custom domain (used for generated short links)
+# Short URLs will be: https://yourdomain.com/CODE
+# Or with path prefix: https://yourdomain.com/blog/CODE
 BASE_URL=${BASE_URL}
 
 # Internal port
@@ -423,6 +413,11 @@ echo -e "${BOLD}    Local URL:${NC}     http://localhost:$PORT"
 
 if [ ${#DOMAINS[@]} -gt 0 ]; then
     echo -e "${BOLD}    Public URL:${NC}   $BASE_URL"
+    echo ""
+    echo -e "    ${YELLOW}Example short URLs:${NC}"
+    echo -e "      ${BOLD}$BASE_URL/abc123${NC}"
+    echo -e "      ${BOLD}$BASE_URL/blog/post456${NC}"
+    echo -e "      ${BOLD}$BASE_URL/go/sale2026${NC}"
 fi
 
 if [ "$METHOD" == "cloudflare" ] && [ ${#DOMAINS[@]} -gt 0 ] && [ "$tunnel_token" != "YOUR_TUNNEL_TOKEN_HERE" ]; then
@@ -430,7 +425,6 @@ if [ "$METHOD" == "cloudflare" ] && [ ${#DOMAINS[@]} -gt 0 ] && [ "$tunnel_token
     echo -e "    ${YELLOW}📋 Next steps in Cloudflare Dashboard:${NC}"
     echo -e "       1. Go to ${BOLD}Networks > Tunnels${NC}"
     echo -e "       2. Select your tunnel"
-
     if [ ${#DOMAINS[@]} -eq 1 ]; then
         echo -e "       3. Add a ${BOLD}Public Hostname${NC}:"
         echo -e "          - Subdomain: ${BOLD}${DOMAINS[0]}${NC}"
