@@ -11,20 +11,61 @@ import json
 import os
 import re
 import secrets
+import signal
+import sys
+import threading
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-DB_PATH = os.environ.get("DB_PATH", "data/urls.db")
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000")
+# Resolve everything relative to this file so the app works from any cwd
+# (docker WORKDIR /app, a systemd unit, or `python3 app.py` from elsewhere).
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INDEX_HTML = os.path.join(BASE_DIR, "index.html")
+
+DB_PATH = os.path.abspath(os.environ.get("DB_PATH") or os.path.join(BASE_DIR, "data", "urls.db"))
 PORT = int(os.environ.get("PORT", 3000))
+# BASE_URL drives the short links we hand back. If it is not set, derive it
+# from PORT so links never point at the wrong port.
+BASE_URL = os.environ.get("BASE_URL") or f"http://localhost:{PORT}"
 CODE_LENGTH = 6
 MAX_LINKS = int(os.environ.get("MAX_LINKS", 10000))
 
-os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else ".", exist_ok=True)
+
+def ensure_data_dir():
+    """Fail early (and loudly) if the database directory is not writable."""
+    data_dir = os.path.dirname(DB_PATH) or "."
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        probe = os.path.join(data_dir, ".write-test")
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+    except OSError as exc:
+        sys.stderr.write(
+            f"\n✗ Cannot write to the database directory: {data_dir}\n"
+            f"  {exc.__class__.__name__}: {exc}\n"
+            f"  The container/process runs as uid={os.getuid()}.\n"
+            f"  Fix it with one of:\n"
+            f"    sudo chown -R {os.getuid()}:{os.getgid()} {data_dir}\n"
+            f"    sudo chmod -R 777 {data_dir}\n"
+            f"    DB_PATH=/somewhere/writable/urls.db python3 app.py\n\n"
+        )
+        sys.exit(1)
+
+
+ensure_data_dir()
+
+
+def connect_db():
+    """SQLite connection with a busy timeout (the server is multi-threaded)."""
+    conn = sqlite3.connect(DB_PATH, timeout=15)
+    conn.execute("PRAGMA busy_timeout = 15000")
+    return conn
+
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_db()
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS urls (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,10 +88,18 @@ def hash_password(pwd: str) -> str:
     return hashlib.sha256((pwd + "shorten-salt").encode()).hexdigest()[:32]
 
 def is_valid_url(url: str) -> bool:
+    if not url or len(url) > 2048:
+        return False
+    # Reject whitespace and control characters. Without this, a URL containing
+    # \r\n gets stored and later written straight into the Location header —
+    # i.e. HTTP response splitting / header injection.
+    for ch in url:
+        if ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F:
+            return False
     try:
         result = urlparse(url)
         return all([result.scheme in ("http", "https"), result.netloc])
-    except:
+    except Exception:
         return False
 
 def is_valid_domain(domain: str) -> bool:
@@ -69,7 +118,7 @@ def get_domain_from_host(host: str) -> str:
     return host.split(":")[0] if host else ""
 
 def get_link_count():
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_db()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM urls")
     count = c.fetchone()[0]
@@ -77,7 +126,7 @@ def get_link_count():
     return count
 
 def cleanup_expired():
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect_db()
     c = conn.cursor()
     c.execute("DELETE FROM urls WHERE expires_at IS NOT NULL AND expires_at < datetime('now')")
     deleted = c.rowcount
@@ -90,26 +139,56 @@ def get_base_url_protocol():
     parsed = urlparse(BASE_URL)
     return parsed.scheme or "https"
 
+def append_query(url: str, query: str) -> str:
+    """Forward a short link's query string to its destination."""
+    if not query:
+        return url
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{query}"
+
 class Handler(BaseHTTPRequestHandler):
+    # Keep-alive: every response below sets Content-Length, so persistent
+    # connections are safe and healthchecks never hang waiting for EOF.
+    protocol_version = "HTTP/1.1"
+
     def log_message(self, format, *args):
+        # Zero logs by design — no IP, no User-Agent, no Referer.
         pass
 
+    def _write_body(self, body: bytes):
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Client went away mid-response. Nothing to log, nothing to fix.
+            self.close_connection = True
+
     def _send_json(self, data, status=200):
+        body = json.dumps(data).encode()
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        self._write_body(body)
 
     def _send_html(self, content, status=200):
+        body = content.encode()
         self.send_response(status)
-        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(content.encode())
+        self._write_body(body)
 
     def _send_redirect(self, url):
+        # Defence in depth: strip CR/LF so a value stored before validation was
+        # tightened can never split the response.
+        url = url.replace("\r", "").replace("\n", "")
         self.send_response(302)
         self.send_header("Location", url)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
 
     def _send_file(self, path, content_type):
@@ -118,16 +197,25 @@ class Handler(BaseHTTPRequestHandler):
                 content = f.read()
             self.send_response(200)
             self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(content)))
             self.end_headers()
-            self.wfile.write(content)
-        except FileNotFoundError:
+            self._write_body(content)
+        except OSError:
             self._send_json({"error": "Not found"}, 404)
 
     def do_OPTIONS(self):
-        self.send_response(200)
+        self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def do_HEAD(self):
+        # Cheap liveness probe for load balancers / uptime monitors.
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     def _get_domain(self):
@@ -135,6 +223,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def _get_base_domain(self):
         return get_domain_from_host(BASE_URL)
+
+    def _is_admin_host(self, host_domain):
+        """True when the caller is on the app's own host and should therefore
+        see every link, not just the ones belonging to one custom domain.
+
+        Without this, opening http://127.0.0.1:PORT while BASE_URL says
+        http://localhost:PORT returned an empty list — the UI looked broken
+        right after a successful install.
+        """
+        if not host_domain:
+            return True
+        if host_domain == self._get_base_domain():
+            return True
+        return host_domain in ("localhost", "127.0.0.1", "0.0.0.0", "::1")
 
     def _build_short_url(self, code, domain=None, path_prefix=None):
         """Build a short URL consistently using the same protocol as BASE_URL."""
@@ -151,18 +253,23 @@ class Handler(BaseHTTPRequestHandler):
             return f"{base}/{code}"
 
     def do_GET(self):
-        path = self.path
+        # Split off any query string: /code?utm=x must still resolve to /code,
+        # and the query is forwarded to the destination URL.
+        raw_path = self.path
+        path, _, query = raw_path.partition("?")
         host_domain = self._get_domain()
         base_domain = self._get_base_domain()
 
-        if path == "/api/stats":
-            count = get_link_count()
-            return self._send_json({"total_links": count, "max_links": MAX_LINKS})
+        if path in ("/api/health", "/healthz", "/api/stats"):
+            if path == "/api/stats":
+                count = get_link_count()
+                return self._send_json({"status": "ok", "total_links": count, "max_links": MAX_LINKS})
+            return self._send_json({"status": "ok"})
 
         if path == "/api/urls":
-            conn = sqlite3.connect(DB_PATH)
+            conn = connect_db()
             c = conn.cursor()
-            if host_domain and host_domain != base_domain:
+            if not self._is_admin_host(host_domain):
                 c.execute("""SELECT code, url, path_prefix, expires_at, created_at, domain, password_hash 
                     FROM urls WHERE domain = ? ORDER BY created_at DESC LIMIT 50""", (host_domain,))
             else:
@@ -182,8 +289,8 @@ class Handler(BaseHTTPRequestHandler):
                 })
             return self._send_json(urls)
 
-        if path == "/" or path == "/index.html":
-            return self._send_file("index.html", "text/html")
+        if path in ("/", "/index.html"):
+            return self._send_file(INDEX_HTML, "text/html; charset=utf-8")
 
         # Parse path: could be /CODE or /PREFIX/CODE
         path_parts = [p for p in path.strip("/").split("/") if p]
@@ -198,11 +305,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "Not found"}, 404)
             return
 
-        if not re.match(r"^[a-zA-Z0-9_-]+$", code):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", code) or not is_valid_path_prefix(prefix):
             self._send_json({"error": "Not found"}, 404)
             return
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = connect_db()
         c = conn.cursor()
         row = None
 
@@ -254,13 +361,16 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
             if pwd_hash:
                 return self._send_password_page(code, prefix, link_domain)
-            return self._send_redirect(url)
+            return self._send_redirect(append_query(url, query))
 
         conn.close()
         self._send_json({"error": "Not found"}, 404)
 
     def _send_password_page(self, code, prefix=None, domain=None):
-        prefix_path = f"{prefix}/" if prefix else ""
+        # JSON-encode every interpolated value so the page can never be turned
+        # into script injection, even if a future validator gets looser.
+        code_json = json.dumps(code or "")
+        prefix_json = json.dumps(prefix or "")
         domain_json = json.dumps(domain or "")
         html = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width">
@@ -292,7 +402,7 @@ function unlock(e) {
 e.preventDefault();
 const pwd = document.getElementById('pwd').value;
 const err = document.getElementById('err');
-fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:'""" + code + """',prefix:'""" + (prefix or "") + """',domain:""" + domain_json + """,password:pwd})})
+fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:""" + code_json + """,prefix:""" + prefix_json + """,domain:""" + domain_json + """,password:pwd})})
 .then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;else{err.textContent=d.error||'Wrong password';err.style.display='block';}})
 .catch(()=>{err.textContent='Error unlocking';err.style.display='block';});
 }
@@ -316,7 +426,13 @@ fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},b
 
             if not url:
                 return self._send_json({"error": "URL is required"}, 400)
-            if not url.startswith(("http://", "https://")):
+            # Only add https:// when there is no scheme at all. Blindly
+            # prefixing turned "ftp://x" into "https://ftp://x" and stored it.
+            scheme = re.match(r"^([a-zA-Z][a-zA-Z0-9+.\-]*):", url)
+            if scheme:
+                if scheme.group(1).lower() not in ("http", "https"):
+                    return self._send_json({"error": "Only http and https URLs are supported"}, 400)
+            else:
                 url = "https://" + url
             if not is_valid_url(url):
                 return self._send_json({"error": "Invalid URL"}, 400)
@@ -327,14 +443,7 @@ fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},b
             if custom_code and not re.match(r"^[a-zA-Z0-9_-]+$", custom_code):
                 return self._send_json({"error": "Invalid code format"}, 400)
 
-            current_count = get_link_count()
-            if current_count >= MAX_LINKS:
-                cleanup_expired()
-                current_count = get_link_count()
-                if current_count >= MAX_LINKS:
-                    return self._send_json({"error": f"Max {MAX_LINKS} links reached"}, 429)
-
-            conn = sqlite3.connect(DB_PATH)
+            conn = connect_db()
             c = conn.cursor()
 
             # Check duplicate - use proper NULL-safe comparison
@@ -350,6 +459,16 @@ fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},b
                 short = self._build_short_url(code, existing_domain, existing_prefix)
                 conn.close()
                 return self._send_json({"short_url": short, "code": code, "domain": existing_domain, "path_prefix": existing_prefix})
+
+            # Enforce the cap only for links that would actually be created, so
+            # re-shortening an existing URL keeps working at MAX_LINKS.
+            current_count = get_link_count()
+            if current_count >= MAX_LINKS:
+                cleanup_expired()
+                current_count = get_link_count()
+                if current_count >= MAX_LINKS:
+                    conn.close()
+                    return self._send_json({"error": f"Max {MAX_LINKS} links reached"}, 429)
 
             # Generate or use custom code
             if custom_code:
@@ -412,7 +531,7 @@ fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},b
             if not code:
                 return self._send_json({"error": "Code is required"}, 400)
 
-            conn = sqlite3.connect(DB_PATH)
+            conn = connect_db()
             c = conn.cursor()
 
             # Look up with domain awareness
@@ -453,19 +572,49 @@ fetch('/api/unlock',{method:'POST',headers:{'Content-Type':'application/json'},b
 
         self._send_json({"error": "Not found"}, 404)
 
+class Server(ThreadingHTTPServer):
+    """Threaded so one slow client (or a healthcheck) never blocks the rest."""
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def main():
     init_db()
     cleanup_expired()
-    server = HTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"🔐 Cloak.URL running at {BASE_URL}")
-    print(f"📁 Database: {os.path.abspath(DB_PATH)}")
-    print(f"🚫 Zero tracking · Zero analytics · Zero logs")
-    print(f"🔢 Max links: {MAX_LINKS}")
+
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n👋 Shutting down...")
-        server.shutdown()
+        server = Server(("0.0.0.0", PORT), Handler)
+    except PermissionError:
+        sys.stderr.write(
+            f"\n✗ Cannot bind to port {PORT} — ports below 1024 need root.\n"
+            f"  Fix: PORT=3000 python3 app.py   (or run behind a reverse proxy)\n\n"
+        )
+        sys.exit(1)
+    except OSError as exc:
+        sys.stderr.write(
+            f"\n✗ Cannot bind to port {PORT}: {exc}\n"
+            f"  Something else is probably already listening on it.\n"
+            f"  Find it:  lsof -i :{PORT}   (Linux/macOS)  |  netstat -ano | findstr :{PORT}  (Windows)\n"
+            f"  Or run on another port: PORT=3001 python3 app.py\n\n"
+        )
+        sys.exit(1)
+
+    def shutdown(signum, _frame):
+        print("\n👋 Shutting down...", flush=True)
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    print(f"🔐 Cloak.URL running at {BASE_URL}")
+    print(f"👂 Listening on 0.0.0.0:{PORT}")
+    print(f"📁 Database: {DB_PATH}")
+    print(f"🚫 Zero tracking · Zero analytics · Zero logs")
+    print(f"🔢 Max links: {MAX_LINKS}", flush=True)
+
+    server.serve_forever(poll_interval=0.2)
+    server.server_close()
+
 
 if __name__ == "__main__":
     main()

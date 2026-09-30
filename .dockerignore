@@ -1,0 +1,24 @@
+# Keep the build context tiny — the image only needs app.py + index.html.
+.git
+.gitignore
+.dockerignore
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.example
+nginx/
+README.md
+install.sh
+Dockerfile
+docker-compose.yml
+cloak-url.service
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+Thumbs.db
+*.swp
