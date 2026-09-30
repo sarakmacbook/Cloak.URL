@@ -1,35 +1,68 @@
+# Cloak.URL — Docker Compose
+#
+# This file is static: every knob is read from `.env` (see `.env.example`).
+# `install.sh` writes `.env` for you, but you can also just:
+#
+#     cp .env.example .env && docker compose up -d --build
+#
+# To change settings later: edit `.env`, then `docker compose up -d`.
+
 services:
   cloak:
-    build: .
+    build:
+      context: .
+    image: cloak-url:local
+    restart: unless-stopped
     ports:
-      - "127.0.0.1:${PORT:-3000}:3000"
+      # 127.0.0.1 keeps the app private — expose it through a tunnel or nginx.
+      # Set BIND_ADDR=0.0.0.0 in .env to reach it from your LAN.
+      - "${BIND_ADDR:-127.0.0.1}:${PORT:-3000}:3000"
     environment:
-      - PORT=3000
-      - BASE_URL=${BASE_URL:-http://localhost:3000}
-      - DB_PATH=/app/data/urls.db
-      - MAX_LINKS=10000
-      # Shown in the "Custom domain · Cloudflare Tunnel" panel so the steps
-      # match how this container is actually reachable from the tunnel.
-      - TUNNEL_SERVICE=${TUNNEL_SERVICE:-http://cloak:3000}
-      - TUNNEL_NAME=${TUNNEL_NAME:-cloak-url}
+      PORT: "3000"
+      BASE_URL: "${BASE_URL:-http://localhost:3000}"
+      DB_PATH: /app/data/urls.db
+      MAX_LINKS: "${MAX_LINKS:-10000}"
+      # Shown in the "Custom domain · Cloudflare Tunnel" panel so the steps match
+      # how this container is actually reachable from the tunnel.
+      TUNNEL_SERVICE: "${TUNNEL_SERVICE:-http://cloak:3000}"
+      TUNNEL_NAME: "${TUNNEL_NAME:-cloak-url}"
       # Optional. The tag in https://one.dash.cloudflare.com/<tag>/... — NOT a
       # secret. With it, "open Cloudflare" links deep-link into your account.
-      - CLOUDFLARE_ACCOUNT_TAG=${CLOUDFLARE_ACCOUNT_TAG:-}
+      CLOUDFLARE_ACCOUNT_TAG: "${CLOUDFLARE_ACCOUNT_TAG:-}"
+      # Outbound domain-verify probes (DNS + one HTTPS request to /api/health).
+      DOMAIN_CHECK_TIMEOUT: "${DOMAIN_CHECK_TIMEOUT:-6}"
+      DOMAIN_CHECK_COOLDOWN: "${DOMAIN_CHECK_COOLDOWN:-5}"
+      MAX_DOMAINS: "${MAX_DOMAINS:-100}"
     volumes:
-      - ${DB_HOST_PATH:-./data}:/app/data
-    restart: unless-stopped
+      # DB_MOUNT=./data     → project folder (default, easy to back up)
+      #   (this variable used to be called DB_HOST_PATH)
+      # DB_MOUNT=cloak-data → named volume (survives `docker compose down`)
+      # DB_MOUNT=/var/lib/cloak-url → any absolute path you own
+      - ${DB_MOUNT:-./data}:/app/data
     networks:
       - cloak-net
+    # No healthcheck here on purpose: it is inherited from the Dockerfile, which
+    # uses Python instead of wget/curl (python:3.11-slim ships neither).
 
+  # Cloudflare Tunnel — no open ports, works behind any router/NAT.
+  # It only starts when the "tunnel" profile is enabled, which install.sh does
+  # automatically when you paste a token:
+  #     COMPOSE_PROFILES=tunnel
+  # There is deliberately NO `depends_on` here: cloudflared retries on its own,
+  # so a slow app start can never block or fail the whole install.
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel run
-    environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
     networks:
       - cloak-net
 
 networks:
   cloak-net:
     driver: bridge
+
+volumes:
+  # Used only when DB_MOUNT=cloak-data.
+  cloak-data:
+    name: ${DB_VOLUME_NAME:-cloak-url-data}
