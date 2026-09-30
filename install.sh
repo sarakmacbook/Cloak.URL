@@ -44,6 +44,11 @@ METHOD="${METHOD:-}"                    # cloudflare | nginx | none | "" = ask
 PORT="${PORT:-3000}"
 DOMAIN="${DOMAIN:-}"
 TUNNEL_TOKEN="${TUNNEL_TOKEN:-}"
+# Cloudflare Zero Trust account tag — NOT a secret. It only makes the dashboard
+# links deep-link into your account instead of the account picker.
+CF_TAG="${CLOUDFLARE_ACCOUNT_TAG:-}"
+TUNNEL_SERVICE="${TUNNEL_SERVICE:-http://cloak:3000}"
+TUNNEL_NAME="${TUNNEL_NAME:-cloak-url}"
 DB_CHOICE="${DB:-1}"                    # 1|project | 2|volume | 3|<path>
 BIND_ADDR="${BIND_ADDR:-127.0.0.1}"
 MAX_LINKS="${MAX_LINKS:-10000}"
@@ -112,6 +117,9 @@ ${BOLD}Options:${NC}
   --db WHERE          1/project (./data, default) | 2/volume | /absolute/path
   --bind ADDR         127.0.0.1 (default, private) | 0.0.0.0 (exposed)
   --max-links N       link cap (default: 10000)
+  --cf-tag TAG        Cloudflare Zero Trust account tag (not a secret) — makes
+                      the dashboard links deep-link into your account
+  --tunnel-service U  service the tunnel forwards to (default http://cloak:3000)
   --no-docker         run with python3 directly — no Docker at all
   --systemd           with --no-docker on Linux: also write a systemd unit
   --no-start          write the config but don't start anything
@@ -219,6 +227,11 @@ write_env() {
         printf 'DB_VOLUME_NAME=cloak-url-data\n'
         printf 'COMPOSE_PROFILES=%s\n' "$COMPOSE_PROFILES"
         printf 'TUNNEL_TOKEN=%s\n' "$TUNNEL_TOKEN"
+        printf '# Cloudflare "Custom domain" panel: deep links + what the tunnel forwards to.\n'
+        printf '# The account tag is not a secret.\n'
+        printf 'CLOUDFLARE_ACCOUNT_TAG=%s\n' "$CF_TAG"
+        printf 'TUNNEL_SERVICE=%s\n' "$TUNNEL_SERVICE"
+        printf 'TUNNEL_NAME=%s\n' "$TUNNEL_NAME"
     } > "$target"
     chmod 600 "$target" 2>/dev/null || true
 }
@@ -247,10 +260,15 @@ print_summary() {
     printf '\n'
 
     if [ "$METHOD" = "cloudflare" ] && [ -n "$TUNNEL_TOKEN" ]; then
-        printf "  ${YELLOW}Cloudflare Tunnel — one last step in the dashboard:${NC}\n"
-        printf "    Networks → Tunnels → your tunnel → Public Hostname\n"
-        printf "    Hostname: ${BOLD}%s${NC}\n" "${DOMAIN:-yourdomain.com}"
-        printf "    Service:  ${BOLD}http://cloak:3000${NC}  (container port, not %s)\n" "$PORT"
+        CF_ZT="https://one.dash.cloudflare.com"
+        if [ -n "$CF_TAG" ]; then CF_ZT="${CF_ZT}/${CF_TAG}"; fi
+        printf "  ${YELLOW}🌐 Connect %s on Cloudflare:${NC}\n" "${DOMAIN:-yourdomain.com}"
+        printf "    ${BOLD}1)%s Tunnel (Docker connector)   ${CYAN}%s/networks/tunnels${NC}\n" "$NC" "$CF_ZT"
+        printf "    ${BOLD}2)%s Add a hostname route        ${BOLD}%s${NC} → ${BOLD}%s${NC}\n" "$NC" "${DOMAIN:-yourdomain.com}" "$TUNNEL_SERVICE"
+        printf "    ${BOLD}3)%s Check the zone's DNS        ${CYAN}https://dash.cloudflare.com/?to=/:account/:zone/dns${NC}\n" "$NC"
+        printf '\n'
+        printf "    ${DIM}Or open %s → Custom domain: it prints these links for you and${NC}\n" "$BASE_URL"
+        printf "    ${DIM}verifies the tunnel end-to-end (DNS + one HTTPS request to /api/health).${NC}\n"
         printf '\n'
         info "Tunnel logs:  ${COMPOSE} logs -f tunnel"
     elif [ "$METHOD" = "nginx" ] && [ -n "$DOMAIN" ]; then
@@ -350,6 +368,8 @@ while [ $# -gt 0 ]; do
         --db)         DB_CHOICE="${2:-}"; shift 2 ;;
         --bind)       BIND_ADDR="${2:-}"; shift 2 ;;
         --max-links)  MAX_LINKS="${2:-}"; shift 2 ;;
+        --cf-tag)     CF_TAG="${2:-}"; shift 2 ;;
+        --tunnel-service) TUNNEL_SERVICE="${2:-}"; shift 2 ;;
         --no-docker)  RUN_MODE="local"; shift ;;
         --systemd)    SYSTEMD=true; shift ;;
         --no-start)   DO_START=false; shift ;;
@@ -575,6 +595,16 @@ if [ "$METHOD" = "cloudflare" ] && [ "$RUN_MODE" = "docker" ]; then
             warn "Skipped — the app will run on localhost only"
             METHOD="none"
         fi
+    fi
+    dim "Optional: Zero Trust account tag — the string in"
+    dim "https://one.dash.cloudflare.com/<tag>/networks/tunnels. Not a secret;"
+    dim "it just makes Cloak.URL deep-link into your account."
+    if [ -n "$CF_TAG" ]; then
+        ok "Account tag supplied via --cf-tag/env"
+    else
+        ANSWER="$(prompt "    Account tag (Enter to skip): " "")"
+        CF_TAG="$ANSWER"
+        if [ -n "$CF_TAG" ]; then ok "Deep links will use tag ${CF_TAG}"; else info "Skipped — links land on the account picker"; fi
     fi
 fi
 if [ "$RUN_MODE" = "local" ]; then
@@ -924,6 +954,8 @@ if [ "$DRY_RUN" = true ]; then
     printf '      MAX_LINKS=%s\n      DB_MOUNT=%s\n' "$MAX_LINKS" "$DB_MOUNT"
     printf '      COMPOSE_PROFILES=%s\n      TUNNEL_TOKEN=%s\n' "$COMPOSE_PROFILES" \
         "$([ -n "$TUNNEL_TOKEN" ] && printf '***set***' || printf '(empty)')"
+    printf '      CLOUDFLARE_ACCOUNT_TAG=%s\n' "${CF_TAG:-(empty)}"
+    printf '      TUNNEL_SERVICE=%s\n      TUNNEL_NAME=%s\n' "$TUNNEL_SERVICE" "$TUNNEL_NAME"
 else
     if [ -f "${SCRIPT_DIR}/.env" ]; then
         cp "${SCRIPT_DIR}/.env" "${SCRIPT_DIR}/.env.bak" 2>/dev/null || true

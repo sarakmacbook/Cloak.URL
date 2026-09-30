@@ -22,8 +22,20 @@ services:
       BASE_URL: "${BASE_URL:-http://localhost:3000}"
       DB_PATH: /app/data/urls.db
       MAX_LINKS: "${MAX_LINKS:-10000}"
+      # Shown in the "Custom domain · Cloudflare Tunnel" panel so the steps match
+      # how this container is actually reachable from the tunnel.
+      TUNNEL_SERVICE: "${TUNNEL_SERVICE:-http://cloak:3000}"
+      TUNNEL_NAME: "${TUNNEL_NAME:-cloak-url}"
+      # Optional. The tag in https://one.dash.cloudflare.com/<tag>/... — NOT a
+      # secret. With it, "open Cloudflare" links deep-link into your account.
+      CLOUDFLARE_ACCOUNT_TAG: "${CLOUDFLARE_ACCOUNT_TAG:-}"
+      # Outbound domain-verify probes (DNS + one HTTPS request to /api/health).
+      DOMAIN_CHECK_TIMEOUT: "${DOMAIN_CHECK_TIMEOUT:-6}"
+      DOMAIN_CHECK_COOLDOWN: "${DOMAIN_CHECK_COOLDOWN:-5}"
+      MAX_DOMAINS: "${MAX_DOMAINS:-100}"
     volumes:
       # DB_MOUNT=./data     → project folder (default, easy to back up)
+      #   (this variable used to be called DB_HOST_PATH)
       # DB_MOUNT=cloak-data → named volume (survives `docker compose down`)
       # DB_MOUNT=/var/lib/cloak-url → any absolute path you own
       - ${DB_MOUNT:-./data}:/app/data

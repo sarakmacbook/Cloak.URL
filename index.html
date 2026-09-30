@@ -149,6 +149,84 @@ button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 }
 .recent-tags { display: flex; gap: 4px; margin-top: 4px; }
 .empty-state { padding: 48px; text-align: center; color: var(--text-secondary); }
+/* ── Cloudflare domain connect ── */
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.card-title { font-size: 18px; font-weight: 700; }
+.card-sub { font-size: 13px; color: var(--text-secondary); margin-top: 3px; }
+.btn-ghost {
+    background: transparent; color: var(--primary); border: 1px solid var(--border);
+    padding: 9px 14px; font-size: 13px; box-shadow: none; font-weight: 600;
+}
+.btn-ghost:hover, .copy-mini:hover {
+    background: var(--bg); border-color: var(--primary); color: var(--primary);
+    transform: none; box-shadow: none;
+}
+.cf-panel { display: none; margin-top: 22px; padding-top: 20px; border-top: 1px dashed var(--border); }
+.cf-panel.show { display: block; animation: slideDown 0.2s ease; }
+.cf-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.cf-host { font-family: 'SF Mono', monospace; font-size: 15px; font-weight: 700; }
+.cf-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+.cf-link {
+    display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; border-radius: 11px;
+    background: var(--primary); color: #fff; text-decoration: none; font-size: 14px; font-weight: 600;
+    transition: all 0.2s;
+}
+.cf-link:hover { background: var(--primary-hover); transform: translateY(-1px); }
+.cf-link.alt { background: transparent; color: var(--primary); border: 1px solid var(--border); }
+.cf-link.alt:hover { background: rgba(37,99,235,0.06); transform: none; }
+.step { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.step:last-of-type { border-bottom: none; }
+.step-num {
+    flex: none; width: 26px; height: 26px; border-radius: 8px; background: rgba(37,99,235,0.1);
+    color: var(--primary); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.step-body { flex: 1; min-width: 0; }
+.step-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.step-text { font-size: 13px; color: var(--text-secondary); }
+.kv { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.kv code {
+    font-family: 'SF Mono', monospace; font-size: 13px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; word-break: break-all;
+}
+.copy-mini { padding: 6px 11px; font-size: 12px; border-radius: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); box-shadow: none; }
+pre.snippet {
+    margin-top: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; font-family: 'SF Mono', monospace; font-size: 12px; line-height: 1.55;
+    overflow-x: auto; white-space: pre; color: var(--text-secondary);
+}
+.cf-panel details { margin-top: 10px; }
+.cf-panel summary { font-size: 13px; color: var(--primary); cursor: pointer; font-weight: 600; }
+.pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; border: 1px solid transparent; white-space: nowrap;
+}
+.pill.ok { background: rgba(16,185,129,0.12); color: var(--success); border-color: rgba(16,185,129,0.25); }
+.pill.warn { background: rgba(245,158,11,0.12); color: var(--warning); border-color: rgba(245,158,11,0.25); }
+.pill.bad { background: rgba(239,68,68,0.1); color: var(--danger); border-color: rgba(239,68,68,0.22); }
+.pill.mute { background: rgba(107,114,128,0.12); color: var(--text-secondary); border-color: var(--border); }
+.cf-status {
+    margin-top: 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--bg); font-size: 13px; display: none;
+}
+.cf-status.show { display: block; animation: slideDown 0.2s ease; }
+.cf-status .why { margin-top: 8px; color: var(--text-secondary); line-height: 1.5; }
+.cf-dots { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-top: 10px; }
+.domain-row { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.d-name { font-weight: 700; font-size: 14px; }
+.d-meta { font-size: 12px; color: var(--text-secondary); }
+.d-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.adv-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.adv-label-row label { margin-bottom: 0; }
+.adv-link { font-size: 12px; color: var(--primary); cursor: pointer; font-weight: 600; background: none; border: none; padding: 0; box-shadow: none; }
+.adv-link:hover { background: none; color: var(--primary-hover); transform: none; box-shadow: none; text-decoration: underline; }
+.advice {
+    margin-top: 16px; padding: 14px 16px; border-radius: 12px; display: none; align-items: flex-start;
+    gap: 12px; background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.25); flex-wrap: wrap;
+}
+.advice.show { display: flex; }
+.advice .a-text { font-size: 13px; flex: 1; min-width: 200px; }
+.advice .a-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.advice button { padding: 9px 14px; font-size: 13px; }
 .spinner {
     display: inline-block; width: 16px; height: 16px;
     border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
@@ -193,8 +271,12 @@ button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
         <div class="advanced-panel" id="advancedPanel">
             <div class="advanced-row">
                 <div class="field">
-                    <label>Custom Domain</label>
-                    <input type="text" id="domainInput" placeholder="e.g. mybrand.com">
+                    <div class="adv-label-row">
+                        <label>Custom Domain</label>
+                        <button type="button" class="adv-link" onclick="openConnect(domainInput.value)">Connect on Cloudflare →</button>
+                    </div>
+                    <input type="text" id="domainInput" placeholder="e.g. links.mybrand.com" list="savedDomains" autocomplete="off">
+                    <datalist id="savedDomains"></datalist>
                 </div>
                 <div class="field">
                     <label>Path Prefix</label>
@@ -236,6 +318,30 @@ button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
             </div>
             <button class="copy-btn" id="copyBtn" onclick="copyUrl()">Copy</button>
         </div>
+
+        <div class="advice" id="domainAdvice">
+            <span style="font-size:18px;">⚠️</span>
+            <div class="a-text" id="adviceText"></div>
+            <div class="a-actions" id="adviceActions"></div>
+        </div>
+    </div>
+
+    <div class="card" id="domainCard">
+        <div class="card-head">
+            <div>
+                <div class="card-title">🌐 Custom domain · Cloudflare Tunnel</div>
+                <div class="card-sub">Type a hostname to get the exact Cloudflare links that connect it, then verify.
+                    No tokens, keys, or cookies — Cloak.URL only stores the hostname.</div>
+            </div>
+            <button class="btn-ghost" onclick="document.getElementById('cfDomain').focus()">Start</button>
+        </div>
+        <div class="input-group">
+            <input type="text" id="cfDomain" placeholder="e.g. links.mybrand.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <button id="cfBtn" onclick="openConnect(cfDomain.value, true)">Get setup link</button>
+        </div>
+        <div class="error" id="cfError"></div>
+        <div class="cf-panel" id="cfPanel"></div>
+        <div id="domainList"></div>
     </div>
 
     <div class="recent">
@@ -282,6 +388,7 @@ async function shorten() {
     if (!url) return;
 
     error.classList.remove('show');
+    document.getElementById('domainAdvice').classList.remove('show');
     shortenBtn.disabled = true;
     shortenBtn.innerHTML = '<span class="spinner"></span>Shortening...';
 
@@ -325,6 +432,7 @@ async function shorten() {
         if (domain) tags.push(`<span class="tag dom">🌐 ${escapeHtml(domain)}</span>`);
         if (pathPrefix) tags.push(`<span class="tag path">📁 /${escapeHtml(pathPrefix)}</span>`);
         resultTags.innerHTML = tags.join('');
+        renderAdvice(data.domain_advice);
 
         result.classList.add('show');
         copyBtn.textContent = 'Copy';
@@ -414,8 +522,376 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Custom domains · "give me the Cloudflare link to make this domain work"
+// ══════════════════════════════════════════════════════════════════════
+const STATE_LABELS = {
+    live: ['ok', '✅ Connected'],
+    base_url: ['ok', '✅ BASE_URL domain'],
+    tunnel_down: ['warn', '🟠 Connector offline'],
+    no_route: ['warn', '🟠 No tunnel route'],
+    tls_error: ['warn', '🟠 TLS / cert issue'],
+    foreign_origin: ['warn', '🟠 Another app answers'],
+    dns_missing: ['bad', '🔴 No DNS record'],
+    unreachable: ['bad', '🔴 Unreachable'],
+    blocked: ['mute', '⚪ Private address — not probed'],
+};
+const SAFE_URL = /^https:\/\/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+$/;
+
+let cf = { domain: null, zone: null, links: null, tunnel: null, status: null, check: null };
+let domains = [];
+
+function urlOrHash(u) { return SAFE_URL.test(u || '') ? u : '#'; }
+function pill(state, ok) {
+    const s = STATE_LABELS[state] || (ok ? ['ok', '✅ Connected'] : ['mute', '⚪ Not checked']);
+    return `<span class="pill ${s[0]}">${s[1]}</span>`;
+}
+function fmtTime(iso) {
+    if (!iso) return 'never';
+    const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T'));
+    return isNaN(d) ? iso : d.toLocaleString();
+}
+
+async function openConnect(value, scroll = true) {
+    const domain = normalizeHost(value || '');
+    const panel = document.getElementById('cfPanel');
+    if (!domain) {
+        panel.classList.remove('show');
+        document.getElementById('domainCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('cfDomain').focus();
+        return;
+    }
+    document.getElementById('cfDomain').value = domain;
+    const btn = document.getElementById('cfBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Loading…';
+    try {
+        const res = await fetch('/api/cloudflare/setup?domain=' + encodeURIComponent(domain));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not load the Cloudflare setup info');
+        cf = {
+            domain: data.domain, zone: data.zone, links: data.links,
+            tunnel: data.tunnel, status: data.status, check: null,
+        };
+        renderCf();
+        panel.classList.add('show');
+        if (scroll) document.getElementById('domainCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+        showCfError(err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Get setup link';
+    }
+}
+
+function normalizeHost(value) {
+    return String(value || '').trim().toLowerCase()
+        .replace(/^[a-z]+:\/\//, '').replace(/\/.*$/, '').replace(/.*@/, '')
+        .replace(/:\d+$/, '').replace(/\.+$/, '');
+}
+
+function renderCf() {
+    const panel = document.getElementById('cfPanel');
+    if (!cf.domain || !cf.links || !cf.tunnel) return;
+    const saved = domains.find(d => d.domain === cf.domain);
+    const check = cf.check;
+    const state = check ? check.state : (saved ? saved.last_state : (cf.status ? cf.status.state : null));
+    const ok = check ? check.ok : (saved ? saved.last_ok : (cf.status ? cf.status.ok : null));
+    const zone = cf.zone || (saved && saved.zone) || cf.domain;
+    const L = cf.links, T = cf.tunnel;
+    const service = (saved && saved.service) || T.service;
+
+    const links = `
+        <div class="cf-actions">
+            <a class="cf-link" href="${urlOrHash(L.tunnel_create)}" target="_blank" rel="noopener noreferrer">
+                ${L.account_tag_configured ? 'Create a tunnel ↗' : 'Open Cloudflare (Tunnels) ↗'}</a>
+            <a class="cf-link alt" href="${urlOrHash(L.tunnel_list)}" target="_blank" rel="noopener noreferrer">My tunnels ↗</a>
+            <a class="cf-link alt" href="${urlOrHash(L.zone_dns)}" target="_blank" rel="noopener noreferrer">DNS · ${escapeHtml(zone)} ↗</a>
+            <a class="cf-link alt" href="${urlOrHash(L.add_site)}" target="_blank" rel="noopener noreferrer">Add domain to Cloudflare ↗</a>
+            <button class="copy-mini" data-act="copy" data-copy="instructions">📋 Copy instructions</button>
+        </div>`;
+
+    const steps = (T.steps || []).map((s, i) => {
+        let extra = '';
+        if (i === 1) {
+            extra = `
+            <div class="kv"><span class="d-meta">Hostname</span><code>${escapeHtml(T.hostname)}</code>
+                <button class="copy-mini" data-act="copy" data-copy="hostname">Copy</button></div>
+            <div class="kv"><span class="d-meta">Service (type HTTP)</span><code>${escapeHtml(service)}</code>
+                <button class="copy-mini" data-act="copy" data-copy="service">Copy</button></div>
+            <div class="kv"><a class="cf-link alt" href="${urlOrHash(L.tunnel_routes)}" target="_blank" rel="noopener noreferrer">Networking → Routes ↗</a></div>`;
+        } else if (i === 2) {
+            extra = `<pre class="snippet">${escapeHtml(T.compose)}</pre>
+            <div class="kv"><span class="d-meta">then</span><code>docker compose up -d</code>
+                <button class="copy-mini" data-act="copy" data-copy="up">Copy</button></div>
+            <details><summary>Prefer config.yml / CNAME instead?</summary>
+                <pre class="snippet">${escapeHtml(T.cloudflared_yml)}</pre>
+                <div class="kv"><button class="copy-mini" data-act="copy" data-copy="yml">Copy config.yml</button>
+                <a class="cf-link alt" href="${urlOrHash(L.docs_routes)}" target="_blank" rel="noopener noreferrer">Route docs ↗</a></div>
+            </details>`;
+        } else if (i === 3) {
+            extra = `<div class="kv" style="margin-top:12px">
+                <button data-act="verify" style="padding:10px 16px;font-size:14px;">${check ? '↻ Re-verify' : 'Verify connection'}</button>
+                <span class="d-meta">Checks DNS, then one HTTPS request to <code>/api/health</code> — nothing else leaves your server.</span></div>`;
+        }
+        return `<div class="step"><div class="step-num">${i + 1}</div><div class="step-body">
+            <div class="step-title">${escapeHtml(s.title)}</div>
+            <div class="step-text">${escapeHtml(s.body)}</div>${extra}</div></div>`;
+    }).join('');
+
+    let statusBox = '';
+    if (check) {
+        if (check.throttled) {
+            statusBox = `<div class="cf-status show"><strong>${pill(state, ok)}</strong>
+                <div class="why">${escapeHtml(check.next_step || 'Slow down a moment.')}</div></div>`;
+        } else {
+            const dns = check.dns || {}, http = check.http || {};
+            statusBox = `
+            <div class="cf-status show">
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    ${pill(check.state, check.ok)}
+                    <span class="d-meta">checked ${escapeHtml(fmtTime(check.checked_at))}</span>
+                    ${check.http && check.http.same_instance ? '<span class="pill ok">same install</span>' : ''}
+                </div>
+                <div class="why">${escapeHtml(check.next_step || '')}</div>
+                <div class="cf-dots">
+                    <span>DNS: ${dns.resolves ? escapeHtml((dns.ips || []).slice(0, 3).join(', ')) : escapeHtml(dns.error || 'no answer')}</span>
+                    ${dns.cloudflare ? '<span>☁️ proxied through Cloudflare</span>' : (dns.resolves ? '<span>⚠️ not a Cloudflare edge IP</span>' : '')}
+                    ${http.status ? `<span>HTTP ${http.status}${http.cf_error ? ' · Cloudflare Error ' + escapeHtml(http.cf_error) : ''}</span>` : ''}
+                    ${http.cf_hint ? `<span>${escapeHtml(http.cf_hint)}</span>` : ''}
+                    ${http.error ? `<span>${escapeHtml(http.error)}</span>` : ''}
+                </div>
+                ${http.cf_error ? `<div class="kv"><a class="cf-link alt" href="${urlOrHash(L.docs_1033)}" target="_blank" rel="noopener noreferrer">Fix Cloudflare error ${escapeHtml(String(http.cf_error))} ↗</a>
+                    <a class="cf-link alt" href="${urlOrHash(L.status)}" target="_blank" rel="noopener noreferrer">Cloudflare status ↗</a></div>` : ''}
+            </div>`;
+        }
+    } else if (state) {
+        statusBox = `<div class="cf-status show"><strong>${pill(state, ok)}</strong>
+            <div class="why">Last checked ${escapeHtml(fmtTime(check ? check.checked_at : (saved && saved.last_checked_at) || (cf.status && cf.status.last_checked_at)))} — press Verify to re-check.</div></div>`;
+    }
+
+    panel.innerHTML = `
+        <div class="cf-top">
+            <span class="cf-host">🌐 ${escapeHtml(cf.domain)}</span>
+            ${pill(state, ok)}
+            <button class="copy-mini" data-act="verify">↻ Verify</button>
+        </div>
+        ${links}${steps}${statusBox}
+        <div class="kv" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+            <input type="text" id="cfNote" placeholder="note (optional)" style="flex:1;min-width:140px;padding:9px 12px;font-size:13px"
+                   value="${escapeHtml((saved && saved.note) || '')}">
+            <button class="copy-mini" data-act="save">${saved ? '💾 Update domain' : '💾 Save domain'}</button>
+            <button class="copy-mini" data-act="save" data-primary="1">Save as default</button>
+            ${saved ? '<button class="copy-mini" data-act="forget">Remove</button>' : ''}
+        </div>`;
+}
+
+async function copyField(key, btn) {
+    let text = '';
+    if (key === 'hostname') text = cf.tunnel.hostname;
+    else if (key === 'service') text = cf.tunnel.service;
+    else if (key === 'compose') text = cf.tunnel.compose;
+    else if (key === 'yml') text = cf.tunnel.cloudflared_yml;
+    else if (key === 'up') text = 'docker compose up -d';
+    else if (key === 'instructions') {
+        const L = cf.links;
+        text = `Cloak.URL — connect ${cf.domain} through a Cloudflare Tunnel\n\n` +
+            `1. ${L.tunnel_create}\n   Create (or reuse) a tunnel, connector type Docker, copy the token.\n\n` +
+            `2. Tunnel → Routes → Add route → Published application\n   Hostname: ${cf.tunnel.hostname}\n   Type: HTTP\n   URL: ${cf.tunnel.service}\n\n` +
+            `3. docker-compose.yml → tunnel service\n${cf.tunnel.compose}\n` +
+            `4. BASE_URL=https://${cf.domain}\n   docker compose up -d\n\n` +
+            `DNS for the zone: ${L.zone_dns}\nDocs: ${L.docs_tunnel}\n`;
+    }
+    await copyText(text, btn);
+}
+
+async function copyText(text, btn) {
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    flashCopied(btn);
+}
+
+function flashCopied(btn) {
+    const el = btn || document.activeElement;
+    if (!el || !el.dataset) return;
+    const prev = el.textContent;
+    el.textContent = '✓ Copied';
+    setTimeout(() => { el.textContent = prev; }, 1400);
+}
+
+async function verifyDomain(domain) {
+    if (!domain) return;
+    const res = await fetch('/api/domains/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Verify failed');
+    if (Array.isArray(data.domains)) domains = data.domains;
+    if (cf.domain === domain) { cf.check = data; renderCf(); }
+    renderDomainList();
+    renderDomainOptions();
+    return data;
+}
+
+async function saveDomain(domain, asDefault) {
+    const noteEl = document.getElementById('cfNote');
+    const res = await fetch('/api/domains', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, note: noteEl ? noteEl.value.trim() : '', is_primary: !!asDefault }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not save domain');
+    domains = data.domains || domains;
+    if (data.domain) cf.status = { state: data.domain.last_state, ok: data.domain.last_ok, last_checked_at: data.domain.last_checked_at };
+    renderCf();
+    renderDomainList();
+    renderDomainOptions(asDefault ? domain : null);
+    if (asDefault) setDomainPrefill(domain);
+}
+
+async function forgetDomain(domain) {
+    const res = await fetch('/api/domains/delete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not remove domain');
+    domains = data.domains || [];
+    renderCf();
+    renderDomainList();
+    renderDomainOptions();
+}
+
+async function makeDefault(domain) {
+    const res = await fetch('/api/domains/primary', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: domain || '' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not update default');
+    domains = data.domains || domains;
+    renderDomainList();
+    renderDomainOptions(data.primary);
+    setDomainPrefill(data.primary);
+}
+
+function setDomainPrefill(primary) {
+    if (primary && !domainInput.value.trim()) domainInput.value = primary;
+}
+
+function renderDomainOptions(primary) {
+    const list = document.getElementById('savedDomains');
+    if (list) list.innerHTML = domains.map(d => `<option value="${escapeHtml(d.domain)}"></option>`).join('');
+    if (primary) setDomainPrefill(primary);
+}
+
+function renderDomainList() {
+    const box = document.getElementById('domainList');
+    if (!box) return;
+    if (!domains.length) {
+        box.innerHTML = '';
+        return;
+    }
+    box.innerHTML = `
+        <div class="d-meta" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+            <strong style="color:var(--text)">${domains.length} saved domain${domains.length > 1 ? 's' : ''}</strong>
+            · ${domains.filter(d => d.last_ok).length} verified · ${domains.filter(d => d.link_count).reduce((a, d) => a + d.link_count, 0)} links use them
+        </div>
+        ${domains.map(d => `
+        <div class="domain-row">
+            <div style="min-width:0">
+                <div class="d-name">${d.is_primary ? '⭐ ' : ''}${escapeHtml(d.domain)}
+                    ${d.is_base_url ? '<span class="pill mute" style="margin-left:6px">BASE_URL</span>' : ''}</div>
+                <div class="d-meta">${d.link_count || 0} link${d.link_count === 1 ? '' : 's'} → ${escapeHtml(d.service || '')}${d.note ? ' · ' + escapeHtml(d.note) : ''}</div>
+            </div>
+            ${pill(d.last_state, d.last_ok)}
+            <div class="d-actions">
+                <button class="copy-mini" data-act="list-verify" data-domain="${escapeHtml(d.domain)}">↻ Verify</button>
+                <button class="copy-mini" data-act="list-connect" data-domain="${escapeHtml(d.domain)}">Connect link</button>
+                ${d.is_primary ? '' : `<button class="copy-mini" data-act="list-default" data-domain="${escapeHtml(d.domain)}">Set default</button>`}
+            </div>
+        </div>`).join('')}`;
+}
+
+async function loadDomains() {
+    try {
+        const res = await fetch('/api/domains');
+        const data = await res.json();
+        domains = data.domains || [];
+        renderDomainList();
+        renderDomainOptions(data.primary);
+    } catch { }
+}
+
+function renderAdvice(advice) {
+    const box = document.getElementById('domainAdvice');
+    if (!box) return;
+    if (!advice || advice.verified || advice.state === 'base_url') {
+        box.classList.remove('show');
+        return;
+    }
+    const L = advice.links || {};
+    document.getElementById('adviceText').innerHTML =
+        `<strong>${escapeHtml(advice.domain)}</strong> isn’t wired to this Cloak.URL yet, so the link above will 404. ` +
+        `Add it as a tunnel hostname pointing at <code>${escapeHtml(advice.service || 'http://cloak:3000')}</code>, then verify.`;
+    document.getElementById('adviceActions').innerHTML =
+        `<a class="cf-link" href="${urlOrHash(L.tunnel_create)}" target="_blank" rel="noopener noreferrer">Connect on Cloudflare ↗</a>
+         <button class="copy-mini" data-act="advice-verify" data-domain="${escapeHtml(advice.domain)}">Verify</button>`;
+    box.classList.add('show');
+}
+
+function showCfError(message) {
+    const box = document.getElementById('cfError');
+    box.textContent = '⚠️ ' + message;
+    box.classList.add('show');
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function handleCfClick(e) {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    const act = el.dataset.act;
+    const domain = el.dataset.domain || cf.domain;
+    if (act === 'copy') { await copyField(el.dataset.copy, el); return; }
+    if (act === 'advice-verify') el.textContent = 'Checking…';
+    if (act === 'list-verify') el.textContent = 'Checking…';
+    try {
+        if (act === 'verify' || act === 'list-verify' || act === 'advice-verify') {
+            await verifyDomain(domain);
+        } else if (act === 'save') {
+            await saveDomain(domain, el.dataset.primary === '1');
+        } else if (act === 'forget') {
+            await forgetDomain(domain);
+        } else if (act === 'list-default') {
+            await makeDefault(domain);
+        } else if (act === 'list-connect') {
+            await openConnect(domain);
+        }
+    } catch (err) {
+        showCfError(err.message);
+    } finally {
+        if (act === 'list-verify' || act === 'advice-verify') el.textContent = '↻ Verify';
+    }
+}
+
+document.getElementById('cfPanel').addEventListener('click', handleCfClick);
+document.getElementById('domainList').addEventListener('click', handleCfClick);
+document.getElementById('domainAdvice').addEventListener('click', handleCfClick);
+document.getElementById('cfDomain').addEventListener('input', () => document.getElementById('cfError').classList.remove('show'));
+document.getElementById('cfDomain').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); openConnect(e.target.value, true); }
+});
+
 loadStats();
 loadRecent();
+loadDomains();
 setInterval(loadStats, 10000);
 </script>
 </body>
